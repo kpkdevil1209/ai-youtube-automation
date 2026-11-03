@@ -1,10 +1,14 @@
-name: Automated YouTube Upload
+name: Automated YouTube Pipeline
 
 on:
   workflow_dispatch:
 
+# GitHub ko repository mein history file save (push) karne ki permission:
+permissions:
+  contents: write
+
 jobs:
-  upload-video:
+  create-and-upload:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
@@ -23,18 +27,36 @@ jobs:
       - name: Install Dependencies
         run: |
           pip install --upgrade pip
-          pip install google-api-python-client google-auth-httplib2 google-auth-oauthlib
+          pip install google-generativeai gTTS google-api-python-client google-auth-httplib2 google-auth-oauthlib
 
-      - name: Decode YouTube Token
+      - name: Step 1 - Generate Unique Script
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          python generate_script.py
+
+      - name: Step 2 - Generate Audio and Subtitles
+        run: |
+          python generate_audio.py
+
+      - name: Step 3 - Create Video with Voiceover
+        run: |
+          ffmpeg -y -f lavfi -i color=c=navy:s=1080x1920:r=30 -i voiceover.mp3 -c:v libx264 -c:a aac -shortest -pix_fmt yuv420p sample_video.mp4
+
+      - name: Step 4 - Decode YouTube Token
         env:
           YOUTUBE_TOKEN_PICKLE: ${{ secrets.YOUTUBE_TOKEN_PICKLE }}
         run: |
           echo "$YOUTUBE_TOKEN_PICKLE" | base64 -d > token.pickle
 
-      - name: Generate Real Sample Video
-        run: |
-          ffmpeg -y -f lavfi -i color=c=blue:s=320x240:d=1 -c:v libx264 -pix_fmt yuv420p sample_video.mp4
-
-      - name: Run Upload Script
+      - name: Step 5 - Upload to YouTube
         run: |
           python upload.py
+
+      # ⭐ YEH STEP HISTORY KO PERMANENTLY GITHUB REPO MEIN SAVE RAKHEGA ⭐
+      - name: Step 6 - Save and Push Topics History
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add uploaded_topics.json
+          git diff --staged --quiet || (git commit -m "chore: update uploaded topics history [skip ci]" && git push)
