@@ -1,10 +1,10 @@
-name: Autonomous AI YouTube Empire
+name: 100% Autonomous AI YouTube Empire (Kaggle GPU)
 
 on:
   schedule:
     # Pakistan Standard Time (PKT) ke mutabiq rozana raat theek 2:00 AM chalega
     - cron: '0 21 * * *'
-  workflow_dispatch: # Manual button se bhi kisi waqt chala sakte hain
+  workflow_dispatch: # Manual test button
 
 permissions:
   contents: write
@@ -25,32 +25,53 @@ jobs:
     - name: Install Dependencies
       run: |
         pip install --upgrade pip
-        pip install google-generativeai gTTS requests google-api-python-client google-auth-httplib2 google-auth-oauthlib
+        pip install google-generativeai gTTS kaggle requests google-api-python-client google-auth-httplib2 google-auth-oauthlib
 
-    - name: Step 1 - Run Script Generator
+    - name: Step 1 - Generate Script (Gemini AI)
       env:
         GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       run: |
         python generate_script.py
 
-    - name: Step 2 - Run TTS Voiceover Generator
+    - name: Step 2 - Generate Voiceover & Subtitles (gTTS)
       run: |
         python generate_audio.py
 
-    - name: Step 3 - Commit & Push Assets to Repository
+    - name: Step 3 - Push Audio/Script to GitHub
       run: |
         git config --global user.name "github-actions[bot]"
         git config --global user.email "github-actions[bot]@users.noreply.github.com"
         git add uploaded_topics.json current_script.json voiceover.mp3 subtitles.srt
-        git commit -m "Auto: Generated new script and voiceover assets [skip ci]" || exit 0
-        git push
+        git diff --staged --quiet || (git commit -m "Auto: Update assets for GPU [skip ci]" && git push)
 
-    - name: Step 4 - Decode YouTube Token
+    - name: Step 4 - Trigger Kaggle NVIDIA T4 GPU
+      env:
+        KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+        KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
+      run: |
+        echo "Pushing job to Kaggle GPU..."
+        kaggle kernels push -p ./kaggle_render
+        echo "Waiting for Kaggle GPU to render video..."
+        while true; do
+          status=$(kaggle kernels status ${{ secrets.KAGGLE_USERNAME }}/ai-youtube-video-renderer | grep -o 'complete\|error')
+          if [ "$status" = "complete" ]; then
+            echo "Kaggle GPU Render Complete!"
+            break
+          elif [ "$status" = "error" ]; then
+            echo "Kaggle GPU Error!"
+            exit 1
+          fi
+          echo "Still rendering on GPU... waiting 15 seconds..."
+          sleep 15
+        done
+        kaggle kernels output ${{ secrets.KAGGLE_USERNAME }}/ai-youtube-video-renderer -p ./
+
+    - name: Step 5 - Decode YouTube Token
       env:
         YOUTUBE_TOKEN_PICKLE: ${{ secrets.YOUTUBE_TOKEN_PICKLE }}
       run: |
         echo "$YOUTUBE_TOKEN_PICKLE" | base64 -d > token.pickle
 
-    - name: Step 5 - Upload and Schedule for 6:00 PM PKT
+    - name: Step 6 - Upload and Schedule Video for 6:00 PM PKT
       run: |
         python upload.py
