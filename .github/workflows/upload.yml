@@ -4,7 +4,7 @@ on:
   schedule:
     # Pakistan Standard Time (PKT) ke mutabiq rozana raat theek 2:00 AM chalega
     - cron: '0 21 * * *'
-  workflow_dispatch: # Manual test button
+  workflow_dispatch: # Test karne ke liye manual button
 
 permissions:
   contents: write
@@ -44,7 +44,18 @@ jobs:
         git add uploaded_topics.json current_script.json voiceover.mp3 subtitles.srt
         git diff --staged --quiet || (git commit -m "Auto: Update assets for GPU [skip ci]" && git push)
 
-    - name: Step 4 - Trigger Kaggle NVIDIA T4 GPU
+    # ⭐ YEH RAHA AAPKA KAGGLE CREDENTIALS SETUP STEP ⭐
+    - name: Step 4 - Setup Kaggle Credentials
+      env:
+        KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+        KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
+      run: |
+        mkdir -p ~/.kaggle
+        echo "$KAGGLE_KEY" > ~/.kaggle/access_token
+        echo "{\"username\":\"$KAGGLE_USERNAME\",\"key\":\"$KAGGLE_KEY\"}" > ~/.kaggle/kaggle.json
+        chmod 600 ~/.kaggle/*
+
+    - name: Step 5 - Trigger Kaggle NVIDIA T4 GPU & Download Video
       env:
         KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
         KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
@@ -66,12 +77,12 @@ jobs:
         done
         kaggle kernels output ${{ secrets.KAGGLE_USERNAME }}/ai-youtube-video-renderer -p ./
 
-    - name: Step 5 - Decode YouTube Token
+    - name: Step 6 - Decode YouTube Token
       env:
         YOUTUBE_TOKEN_PICKLE: ${{ secrets.YOUTUBE_TOKEN_PICKLE }}
       run: |
         echo "$YOUTUBE_TOKEN_PICKLE" | base64 -d > token.pickle
 
-    - name: Step 6 - Upload and Schedule Video for 6:00 PM PKT
+    - name: Step 7 - Upload and Schedule Video for 6:00 PM PKT
       run: |
         python upload.py
