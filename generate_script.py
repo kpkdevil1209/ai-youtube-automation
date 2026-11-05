@@ -4,90 +4,79 @@ import json
 import re
 import random
 import time
-import urllib.request
-import urllib.parse
 import subprocess
+import urllib.request
 
-# Auto-install library if missing
-try:
-    from google import genai
-except ImportError:
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "-U", "google-genai"])
-    from google import genai
+def ensure_ollama_and_llama():
+    """GitHub runner par Ollama aur Meta Llama 3.2 model set karta hai"""
+    # 1. Install Ollama agar na ho
+    if subprocess.call(["which", "ollama"]) != 0:
+        print("[*] Installing Ollama Engine...")
+        subprocess.check_call("curl -fsSL https://ollama.com/install.sh | sh", shell=True)
 
-API_KEY = "AQ.Ab8RN6LB1Bd9vV6iYCyd2fDAv_fdVTDloHPUgMIde-_ysfKLSA"
-if os.getenv("GEMINI_API_KEY"):
-    API_KEY = os.getenv("GEMINI_API_KEY").strip()
+    # 2. Start Ollama Background Service
+    print("[*] Starting Local AI Service...")
+    subprocess.Popen(["ollama", "serve"])
+    time.sleep(3)
 
-def get_ai_response(prompt):
-    """Pehle Google Gemini se live call, agar busy ho to Backup AI se live call"""
-    # 1. Try Gemini
-    try:
-        print("[*] Calling Google Gemini 3.8 Flash...")
-        client = genai.Client(api_key=API_KEY)
-        response = client.models.generate_content(
-            model="gemini-3.8-flash",
-            contents=prompt
-        )
-        raw = response.text.strip()
-        match = re.search(r'\{.*\}', raw, re.DOTALL)
-        if match:
-            return json.loads(match.group(0))
-    except Exception as e:
-        print(f"[!] Gemini temporary error: {e}")
+    # 3. Download Meta's Llama 3.2 3B (Viral Creative Writing King)
+    print("[*] Pulling Meta Llama-3.2 (3B) Model (~2.0 GB)...")
+    subprocess.check_call(["ollama", "pull", "llama3.2:3b"])
 
-    # 2. Try Backup AI (Live AI without load limits)
-    print("[*] Calling Live Backup AI Engine...")
-    url = f"https://text.pollinations.ai/{urllib.parse.quote(prompt)}?json=true"
-    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        raw = resp.read().decode("utf-8").strip()
-        match = re.search(r'\{.*\}', raw, re.DOTALL)
-        if match:
-            return json.loads(match.group(0))
-        return json.loads(raw)
+def query_llama(prompt):
+    """Meta Llama 3.2 se native JSON script generate karta hai"""
+    url = "http://127.0.0.1:11434/api/generate"
+    payload = {
+        "model": "llama3.2:3b",
+        "prompt": prompt,
+        "stream": False,
+        "format": "json"  # Built-in strict JSON mode
+    }
+    
+    data = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
+    
+    with urllib.request.urlopen(req, timeout=90) as resp:
+        result = json.loads(resp.read().decode("utf-8"))
+        raw_json = result.get("response", "{}")
+        return json.loads(raw_json)
 
 def main():
+    ensure_ollama_and_llama()
+
     categories = [
-        "Dark Psychology: Psychological manipulation tactics people use on you daily",
+        "Dark Psychology: Manipulation tactics people secretly use in conversations",
         "Disturbing human brain glitches and illusions science cannot explain",
-        "Deep Space Terrors: Black holes drifting silently in our galaxy",
+        "Deep Space Terrors: Rogue black holes drifting silently across galaxies",
         "Subconscious body language cues: How to read anyone like an open book"
     ]
     chosen_category = random.choice(categories)
 
     prompt = f"""
-You are a viral YouTube Shorts scriptwriter.
-Topic: {chosen_category}
+You are a viral YouTube Shorts scriptwriter with millions of views.
+Category: {chosen_category}
 
-Write a captivating 45-second vertical video script between 110 and 135 words.
-Respond strictly ONLY in raw JSON format:
-{{
-  "title": "Shocking Catchy Title #Shorts",
-  "script": "Full voiceover narration text without brackets or sound cues."
-}}
+Write a gripping, high-retention 45-second vertical video script between 110 and 130 words.
+Rules:
+- First sentence must be an irresistible psychological hook.
+- Fast pacing with continuous suspense in the middle.
+- End with a mind-bending question or infinite loop.
+- No sound cues like [whisper] or [music]. Just spoken words.
+
+Respond in valid JSON format with keys:
+"title": "Shocking Catchy Title #Shorts",
+"script": "Full voiceover narration text"
 """
 
-    data = get_ai_response(prompt)
-    if not data or not isinstance(data, dict):
-        raise RuntimeError("[ERROR] AI se response nahi mila!")
-
-    # Sirf aur sirf AI ke response se script nikaalein
-    script_text = ""
-    for k in ["script", "text", "narration", "voiceover", "content", "story"]:
-        if data.get(k) and isinstance(data[k], str) and len(data[k].strip()) > 30:
-            script_text = data[k].strip()
-            break
-
-    if not script_text:
-        for val in data.values():
-            if isinstance(val, str) and len(val.strip()) > len(script_text):
-                script_text = val.strip()
-
-    if not script_text:
-        raise RuntimeError("[ERROR] AI response ke andar script text nahi mila!")
+    print("[*] Generating viral script using Meta Llama 3.2 (3B)...")
+    data = query_llama(prompt)
 
     title_text = data.get("title", "Shocking Truth #Shorts")
+    script_text = data.get("script") or data.get("text") or ""
+
+    if not script_text:
+        print("[ERROR] Model ne script text create nahi kiya!")
+        sys.exit(1)
 
     # current_script.json save karein
     script_data = {
@@ -97,15 +86,17 @@ Respond strictly ONLY in raw JSON format:
         "text": script_text,
         "narration": script_text,
         "voiceover": script_text,
-        "word_count": len(script_text.split())
+        "word_count": len(script_text.split()),
+        "ai_engine": "Meta-Llama-3.2-3B"
     }
 
     with open("current_script.json", "w", encoding="utf-8") as f:
         json.dump(script_data, f, indent=2, ensure_ascii=False)
 
-    print(f"[✓] Pure Live AI Script generated ({len(script_text.split())} words)!")
+    print(f"[✓] SUCCESS! Meta Llama 3.2 ne super-viral script generate kar di!")
     print(f"Title: {title_text}")
-    print(f"Live AI Script Preview: {script_text[:120]}...")
+    print(f"Word Count: {len(script_text.split())} words (~45s voiceover)")
+    print(f"Preview: {script_text[:120]}...")
 
 if __name__ == "__main__":
     main()
