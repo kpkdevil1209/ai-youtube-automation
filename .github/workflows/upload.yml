@@ -54,35 +54,27 @@ jobs:
         echo "$KAGGLE_KEY" > ~/.kaggle/access_token
         echo "{\"username\":\"$KAGGLE_USERNAME\",\"key\":\"$KAGGLE_KEY\"}" > ~/.kaggle/kaggle.json
         chmod 600 ~/.kaggle/*
+             - name: Step 5 - Trigger Kaggle NVIDIA T4 GPU & Download Video
+        run: |
+          echo "[*] Pushing job to Kaggle GPU..."
+          kaggle kernels push -p ./kaggle_render
+          
+          echo "[*] Waiting for Kaggle T4 GPU to render Full AI Video..."
+          # 5 minutes tak har 15 second baad status check karein
+          for i in {1..25}; do
+            STATUS=$(kaggle kernels status kpkdevil/ai-video-renderer)
+            echo "Attempt $i: $STATUS"
+            if echo "$STATUS" | grep -q "complete"; then
+              echo "[✓] Kaggle GPU ne video render kar di!"
+              break
+            fi
+            sleep 15
+          done
 
-    - name: Step 5 - Trigger Kaggle NVIDIA T4 GPU & Download Video
-      env:
-        KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
-        KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
-      run: |
-        echo "Pushing job to Kaggle GPU..."
-        kaggle kernels push -p ./kaggle_render
-        echo "Waiting for Kaggle GPU to render video..."
-        while true; do
-          status=$(kaggle kernels status ${{ secrets.KAGGLE_USERNAME }}/ai-youtube-video-renderer | grep -o 'complete\|error')
-          if [ "$status" = "complete" ]; then
-            echo "Kaggle GPU Render Complete!"
-            break
-          elif [ "$status" = "error" ]; then
-            echo "Kaggle GPU Error!"
-            exit 1
-          fi
-          echo "Still rendering on GPU... waiting 15 seconds..."
-          sleep 15
-        done
-        kaggle kernels output ${{ secrets.KAGGLE_USERNAME }}/ai-youtube-video-renderer -p ./
-
-    - name: Step 6 - Decode YouTube Token
-      env:
-        YOUTUBE_TOKEN_PICKLE: ${{ secrets.YOUTUBE_TOKEN_PICKLE }}
-      run: |
-        echo "$YOUTUBE_TOKEN_PICKLE" | base64 -d > token.pickle
-
-    - name: Step 7 - Upload and Schedule Video for 6:00 PM PKT
-      run: |
-        python upload.py
+          # Output download karein
+          echo "[*] Downloading final_output.mp4 from Kaggle..."
+          kaggle kernels output kpkdevil/ai-video-renderer -p ./
+          
+          # Check karein ke video download hui hai ya nahi
+          ls -lh final_output.mp4
+          echo "[✓] Full AI Video download ho gayi, ready for YouTube upload!"
