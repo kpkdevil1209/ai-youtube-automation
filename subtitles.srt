@@ -1,99 +1,103 @@
 1
 00:00:00,000 --> 00:00:01,399
-Imagine you're at the
+Imagine being the last
 
 2
 00:00:01,399 --> 00:00:02,799
-edge of a cliff,
+person on Earth, surrounded
 
 3
 00:00:02,799 --> 00:00:04,199
-staring into the void.
+by an endless silence.
 
 4
 00:00:04,199 --> 00:00:05,599
-You feel the wind
+The stars have died,
 
 5
 00:00:05,599 --> 00:00:07,000
-rushing past, and yet,
+the planets have frozen,
 
 6
 00:00:07,000 --> 00:00:08,400
-you know you can't
+and you're left with
 
 7
 00:00:08,400 --> 00:00:09,800
-fall. The ground beneath
+only one question: what
 
 8
 00:00:09,800 --> 00:00:11,200
-your feet is solid,
+happened? Drifting silently across
 
 9
 00:00:11,200 --> 00:00:12,600
-yet the sense of
+the galaxy, a rogue
 
 10
 00:00:12,600 --> 00:00:14,000
-vertigo is overwhelming. It's
+black hole has been
 
 11
 00:00:14,000 --> 00:00:15,400
-as if your brain
+hiding in plain sight.
 
 12
 00:00:15,400 --> 00:00:16,800
-is playing a cruel
+Its presence warps space-time,
 
 13
 00:00:16,800 --> 00:00:18,199
-trick on you. But
+creating an illusion of
 
 14
 00:00:18,199 --> 00:00:19,599
-what if your brain
+safety. But as you
 
 15
 00:00:19,599 --> 00:00:20,999
-is not just playing
+approach the event horizon,
 
 16
 00:00:20,999 --> 00:00:22,399
-a trick? What if
+the gravity becomes irresistible.
 
 17
 00:00:22,399 --> 00:00:23,799
-it's actually trying to
+Time appears to slow
 
 18
 00:00:23,799 --> 00:00:25,199
-tell you something? But
+down, and the universe
 
 19
 00:00:25,199 --> 00:00:26,599
-what if you can't
+unravels before your eyes.
 
 20
 00:00:26,599 --> 00:00:27,999
-listen? What if the
+Will you find answers,
 
 21
 00:00:27,999 --> 00:00:29,399
-only way to escape
+or will you become
 
 22
 00:00:29,399 --> 00:00:30,799
-is to stare into
+a permanent resident of
 
 23
 00:00:30,799 --> 00:00:32,199
-the void... and get
+the void? Can you
 
 24
 00:00:32,199 --> 00:00:33,599
-lost in your own
+escape the black hole's
 
 25
-00:00:33,599 --> 00:00:34,299
-mind forever?
+00:00:33,599 --> 00:00:34,999
+infinite loop, or will
+
+26
+00:00:34,999 --> 00:00:36,399
+you be trapped forever?
