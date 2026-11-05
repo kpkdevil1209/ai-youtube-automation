@@ -3,18 +3,26 @@ import sys
 import json
 import re
 import random
-from google import genai
+import subprocess
+
+# Agar google-genai install na ho to khud install karein
+try:
+    from google import genai
+except ImportError:
+    print("[*] google-genai library install ho rahi hai...")
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "-U", "google-genai"])
+    from google import genai
 
 API_KEY = "AQ.Ab8RN6LB1Bd9vV6iYCyd2fDAv_fdVTDloHPUgMIde-_ysfKLSA"
 if os.getenv("GEMINI_API_KEY"):
     API_KEY = os.getenv("GEMINI_API_KEY").strip()
 
 def main():
-    print("[*] Official Google GenAI Interactions Client initialize ho raha hai...")
+    print("[*] Google GenAI Client initialize ho raha hai...")
     client = genai.Client(api_key=API_KEY)
 
     categories = [
-        "Dark Psychology: Psychological manipulation tactics people use on you daily",
+        "Dark Psychology: Hidden manipulation tactics people use on you daily",
         "Disturbing human brain glitches and illusions that scientists cannot explain",
         "Deep Space Terrors: Black holes and rogue planets drifting silently",
         "Unsolved historical mysteries that sound like science fiction",
@@ -22,22 +30,22 @@ def main():
     ]
     chosen_category = random.choice(categories)
 
-    # 40-60 seconds ke liye 110-130 words ka strict rule
+    # 40-60 seconds (110-135 words)
     prompt = f"""
-You are a viral YouTube Shorts creator specializing in high-retention content.
-Topic Category: {chosen_category}
+You are a viral YouTube Shorts scriptwriter.
+Topic: {chosen_category}
 
-Write a captivating, thrilling, fast-paced vertical video script.
-Length Requirement:
-- Duration MUST be between 40 and 55 seconds when read aloud.
-- Word count MUST be between 110 and 135 words (do not make it shorter than 100 words).
-- Hook the audience in the first 3 seconds.
-- Create suspense in the middle, and an unexpected twist or infinite loop at the end.
+Write a captivating 45-second vertical video script.
+Length: between 110 and 135 words.
+Structure:
+- Intense hook in first 3 seconds
+- Fast-paced explanation with psychological tension
+- Unforgettable ending or loop
 
-Strictly respond ONLY with valid raw JSON (no markdown ticks, no extra text):
+Respond ONLY in raw JSON (no markdown backticks):
 {{
   "title": "Shocking Catchy Title #Shorts #Facts",
-  "text": "Full voiceover narration text. Do not include bracketed cues like [music] or (whispers). Just pure spoken words."
+  "text": "Full voiceover narration without brackets or sound cues."
 }}
 """
 
@@ -54,20 +62,21 @@ Strictly respond ONLY with valid raw JSON (no markdown ticks, no extra text):
             )
             raw_text = interaction.output_text.strip()
             
-            # JSON Clean extraction
+            # JSON clean extraction
             match = re.search(r'\{.*\}', raw_text, re.DOTALL)
             if match:
                 data = json.loads(match.group(0))
                 title_text = data.get("title", "Shocking Truth #Shorts")
                 script_text = data.get("text") or data.get("script") or ""
-                if script_text and len(script_text.split()) >= 80:
-                    print(f"[✓] Gemini Model {model_name} se {len(script_text.split())} words ki 40-60s script tayar!")
+                if script_text:
+                    words = len(script_text.split())
+                    print(f"[✓] Gemini Model {model_name} se {words} words ki 40-60s script ban gayi!")
                     break
         except Exception as e:
             print(f"[!] Model {model_name} error: {e}")
 
     if not script_text:
-        print("[X] ERROR: Gemini API call fail hui! Google Cloud / AI Studio project status check karein.")
+        print("[X] ERROR: Gemini response nahi mila. API key check karein.")
         sys.exit(1)
 
     # current_script.json save karein
@@ -84,9 +93,9 @@ Strictly respond ONLY with valid raw JSON (no markdown ticks, no extra text):
     with open("current_script.json", "w", encoding="utf-8") as f:
         json.dump(script_data, f, indent=2, ensure_ascii=False)
 
-    print(f"[✓] 40-60 second ki video script current_script.json mein save ho gayi!")
+    print(f"[✓] Script kamyabi se current_script.json mein save ho gayi!")
     print(f"Title: {title_text}")
-    print(f"Total Words: {len(script_text.split())} (Expected time: ~45-50 seconds)")
+    print(f"Words: {len(script_text.split())} (Duration: ~45-50s)")
 
 if __name__ == "__main__":
     main()
