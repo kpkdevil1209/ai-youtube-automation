@@ -2,65 +2,61 @@ name: 100% Autonomous AI YouTube Empire (Kaggle GPU)
 
 on:
   schedule:
-    # Pakistan Standard Time (PKT) ke mutabiq rozana raat theek 2:00 AM chalega
+    # Rozana raat 2:00 AM PKT (9:00 PM UTC) par automatically chale
     - cron: '0 21 * * *'
-  workflow_dispatch: # Test karne ke liye manual button
-
-permissions:
-  contents: write
+  workflow_dispatch:
 
 jobs:
-  run-pipeline:
+  build-and-upload:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
-    - name: Checkout Repository
-      uses: actions/checkout@v4
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.10'
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
 
-    - name: Install Dependencies
-      run: |
-        pip install --upgrade pip
-        pip install google-generativeai gTTS kaggle requests google-api-python-client google-auth-httplib2 google-auth-oauthlib
-
-    - name: Step 1 - Generate Script (Gemini AI)
-      env:
-        GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-      run: |
-        python generate_script.py
-
-    - name: Step 2 - Generate Voiceover & Subtitles (gTTS)
-      run: |
-        python generate_audio.py
-
-    - name: Step 3 - Push Audio/Script to GitHub
-      run: |
-        git config --global user.name "github-actions[bot]"
-        git config --global user.email "github-actions[bot]@users.noreply.github.com"
-        git add uploaded_topics.json current_script.json voiceover.mp3 subtitles.srt
-        git diff --staged --quiet || (git commit -m "Auto: Update assets for GPU [skip ci]" && git push)
-
-    # ⭐ YEH RAHA AAPKA KAGGLE CREDENTIALS SETUP STEP ⭐
-    - name: Step 4 - Setup Kaggle Credentials
-      env:
-        KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
-        KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
-      run: |
-        mkdir -p ~/.kaggle
-        echo "$KAGGLE_KEY" > ~/.kaggle/access_token
-        echo "{\"username\":\"$KAGGLE_USERNAME\",\"key\":\"$KAGGLE_KEY\"}" > ~/.kaggle/kaggle.json
-        chmod 600 ~/.kaggle/*
-             - name: Step 5 - Trigger Kaggle NVIDIA T4 GPU & Download Video
+      - name: Install Base Dependencies
         run: |
-          echo "[*] Pushing job to Kaggle GPU..."
+          python -m pip install --upgrade pip
+          pip install gTTS kaggle google-api-python-client google-auth-oauthlib google-auth-httplib2 requests
+
+      - name: Step 1 - Generate Script (Meta Llama 3.2 AI)
+        run: |
+          python generate_script.py
+
+      - name: Step 2 - Generate Voiceover & Subtitles (gTTS)
+        run: |
+          python generate_audio.py
+
+      - name: Step 3 - Push Audio/Script to GitHub
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add current_script.json voiceover.mp3 subtitles.srt
+          git commit -m "Auto: Update script, voiceover and subtitles [skip ci]" || echo "No changes to commit"
+          git push
+
+      - name: Step 4 - Setup Kaggle Credentials
+        env:
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
+        run: |
+          mkdir -p ~/.kaggle
+          echo "{\"username\":\"$KAGGLE_USERNAME\",\"key\":\"$KAGGLE_KEY\"}" > ~/.kaggle/kaggle.json
+          chmod 600 ~/.kaggle/kaggle.json
+
+      - name: Step 5 - Trigger Kaggle NVIDIA T4 GPU & Download Video
+        run: |
+          echo "[*] Pushing render job to Kaggle T4 GPU..."
           kaggle kernels push -p ./kaggle_render
           
           echo "[*] Waiting for Kaggle T4 GPU to render Full AI Video..."
-          # 5 minutes tak har 15 second baad status check karein
           for i in {1..25}; do
             STATUS=$(kaggle kernels status kpkdevil/ai-video-renderer)
             echo "Attempt $i: $STATUS"
@@ -71,10 +67,18 @@ jobs:
             sleep 15
           done
 
-          # Output download karein
           echo "[*] Downloading final_output.mp4 from Kaggle..."
           kaggle kernels output kpkdevil/ai-video-renderer -p ./
           
-          # Check karein ke video download hui hai ya nahi
           ls -lh final_output.mp4
-          echo "[✓] Full AI Video download ho gayi, ready for YouTube upload!"
+          echo "[✓] Full AI Video Download Complete!"
+
+      - name: Step 6 - Decode YouTube Token
+        env:
+          YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET_JSON }}
+        run: |
+          echo "$YOUTUBE_CLIENT_SECRET" > client_secrets.json
+
+      - name: Step 7 - Upload and Schedule Video for 6:00 PM PKT
+        run: |
+          python upload_video.py
