@@ -1,46 +1,77 @@
-import json, os, sys
+import os
+import sys
+import json
+import re
 from gtts import gTTS
 
-script_file = "current_script.json"
-if not os.path.exists(script_file):
-    print("\n[ERROR] current_script.json nahi mili! Pehle generate_script.py run karein.")
-    sys.exit(1)
+def main():
+    print("[*] Audio generation shuru ho rahi hai...")
+    
+    if not os.path.exists("current_script.json"):
+        print("[ERROR] current_script.json file nahi mili!")
+        sys.exit(1)
 
-script_data = json.load(open(script_file, "r", encoding="utf-8"))
-text = script_data.get("script_text", "").strip()
+    with open("current_script.json", "r", encoding="utf-8") as f:
+        data = json.load(f)
 
-if not text:
-    print("\n[ERROR] Script text khali hai!")
-    sys.exit(1)
+    # Smart text extraction (chahe script, text ya narration kisi bhi naam se ho)
+    script_text = ""
+    for key in ["script", "text", "narration", "voiceover", "content"]:
+        if data.get(key) and isinstance(data[key], str) and len(data[key].strip()) > 10:
+            script_text = data[key].strip()
+            break
 
-print("1. Generating Voiceover with gTTS...")
-tts = gTTS(text=text, lang="en", slow=False)
-tts.save("voiceover.mp3")
-print("✓ voiceover.mp3 generated successfully!")
+    if not script_text:
+        # Fallback to longest string
+        for val in data.values():
+            if isinstance(val, str) and len(val) > len(script_text):
+                script_text = val
 
-print("2. Generating Synchronized Subtitles (subtitles.srt)...")
-sentences = [s.strip() for s in text.replace("!", ".").replace("?", ".").split(".") if s.strip()]
-if not sentences:
-    sentences = [text]
+    if not script_text:
+        print("[ERROR] Script text bilkul khali hai!")
+        sys.exit(1)
 
-# Speaking speed approx 2.5 words per second
-total_est_seconds = max(5.0, len(text.split()) / 2.5)
-duration_per_sent = total_est_seconds / len(sentences)
+    print(f"[✓] Narration text mil gaya ({len(script_text.split())} words):")
+    print(f"{script_text[:100]}...")
 
-srt_entries = []
-for idx, sent in enumerate(sentences, 1):
-    start = (idx - 1) * duration_per_sent
-    end = idx * duration_per_sent
-    s_m, s_s = divmod(int(start), 60)
-    e_m, e_s = divmod(int(end), 60)
-    s_ms = int((start - int(start)) * 1000)
-    e_ms = int((end - int(end)) * 1000)
-    start_ts = f"00:{s_m:02d}:{s_s:02d},{s_ms:03d}"
-    end_ts = f"00:{e_m:02d}:{e_s:02d},{e_ms:03d}"
-    srt_entries.append(f"{idx}\n{start_ts} --> {end_ts}\n{sent}\n")
+    # Voiceover MP3 banayein (gTTS se)
+    print("[*] Generating voiceover.mp3 using gTTS...")
+    tts = gTTS(text=script_text, lang='en', slow=False)
+    tts.save("voiceover.mp3")
+    print("[✓] voiceover.mp3 kamyabi se save ho gayi!")
 
-with open("subtitles.srt", "w", encoding="utf-8") as f:
-    f.write("\n".join(srt_entries))
+    # Subtitles (.srt) generate karein
+    print("[*] Generating subtitles.srt...")
+    words = script_text.split()
+    total_words = len(words)
+    # Approx 0.35s per word for natural gTTS pace
+    word_duration = 0.35
+    chunk_size = 4  # 4 words per subtitle line for Shorts
 
-print("✓ subtitles.srt generated successfully with proper timings!")
-print("\n🎉 [SUCCESS] Audio and Subtitles ready for Video Creation!")
+    srt_lines = []
+    idx = 1
+    current_time = 0.0
+
+    for i in range(0, total_words, chunk_size):
+        chunk = " ".join(words[i:i + chunk_size])
+        start_time = current_time
+        end_time = current_time + (len(chunk.split()) * word_duration)
+
+        def format_time(seconds):
+            h = int(seconds // 3600)
+            m = int((seconds % 3600) // 60)
+            s = int(seconds % 60)
+            ms = int((seconds - int(seconds)) * 1000)
+            return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
+
+        srt_lines.append(f"{idx}\n{format_time(start_time)} --> {format_time(end_time)}\n{chunk}\n")
+        idx += 1
+        current_time = end_time
+
+    with open("subtitles.srt", "w", encoding="utf-8") as f:
+        f.write("\n".join(srt_lines))
+
+    print("[✓] subtitles.srt kamyabi se ban gayi!")
+
+if __name__ == "__main__":
+    main()
