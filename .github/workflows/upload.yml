@@ -77,7 +77,13 @@ jobs:
         env:
           YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET_JSON }}
         run: |
-          echo "$YOUTUBE_CLIENT_SECRET" > client_secrets.json
+          # Agar Base64 encoded ho to decode karein warna direct likhein
+          if echo "$YOUTUBE_CLIENT_SECRET" | base64 -d 2>/dev/null | grep -q "{"; then
+            echo "$YOUTUBE_CLIENT_SECRET" | base64 -d > client_secrets.json
+          else
+            echo "$YOUTUBE_CLIENT_SECRET" > client_secrets.json
+          fi
+          echo "[*] Token file ready: $(ls -lh client_secrets.json)"
 
       - name: Step 7 - Upload and Schedule Video for 6:00 PM PKT
         run: |
