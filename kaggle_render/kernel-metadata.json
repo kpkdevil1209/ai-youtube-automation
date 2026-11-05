@@ -1,7 +1,7 @@
 {
-  "id": "kpkdevil/ai-youtube-video-renderer",
-  "title": "AI YouTube Video Renderer",
-  "code_file": "render_gpu.py",
+  "id": "kpkdevil/ai-video-renderer",
+  "title": "ai-video-renderer",
+  "code_file": "render_video.py",
   "language": "python",
   "kernel_type": "script",
   "is_private": "true",
