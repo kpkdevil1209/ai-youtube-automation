@@ -2,12 +2,13 @@ import os
 import sys
 import json
 import base64
+import pickle
 import datetime
-import google.oauth2.credentials
+import google.auth.transport.requests
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 
-print("[*] Starting YouTube Autonomous Upload Engine...")
+print("[*] Starting YouTube Autonomous Upload Engine (Pickle Mode)...")
 
 # 1. Video aur Script check
 VIDEO_PATH = "final_output.mp4"
@@ -16,7 +17,7 @@ if not os.path.exists(VIDEO_PATH):
     sys.exit(1)
 
 title = "Mind-Blowing Facts You Didn't Know #Shorts #Facts"
-description = "Subscribe for daily high-retention mind-blowing facts and dark psychology secrets.\n\n#Shorts #viral #facts"
+description = "Subscribe for daily high-retention mind-blowing facts.\n\n#Shorts #viral #facts"
 
 if os.path.exists("current_script.json"):
     try:
@@ -30,46 +31,42 @@ if os.path.exists("current_script.json"):
 
 print(f"[*] Video Title: {title}")
 
-# 2. Token File Read & Decode
-TOKEN_FILE = "client_secrets.json"
-if not os.path.exists(TOKEN_FILE):
-    print(f"[X] ERROR: {TOKEN_FILE} file nahi mili!")
-    sys.exit(1)
+# 2. YOUTUBE_TOKEN_PICKLE ko decode karein
+credentials = None
 
-with open(TOKEN_FILE, "r", encoding="utf-8") as f:
-    raw_content = f.read().strip()
+# A. Environment variable se check karein
+token_b64 = os.getenv("YOUTUBE_TOKEN_PICKLE", "").strip()
 
-if not raw_content:
-    print("[X] ERROR: client_secrets.json khali hai! GitHub Secrets mein YOUTUBE_CLIENT_SECRET_JSON check karein.")
-    sys.exit(1)
-
-# Auto-detect: Direct JSON ya Base64
-token_info = None
-try:
-    token_info = json.loads(raw_content)
-except Exception:
+if token_b64:
     try:
-        decoded_bytes = base64.b64decode(raw_content)
-        token_info = json.loads(decoded_bytes.decode("utf-8"))
-        print("[✓] Base64 encoded token successfully decoded!")
+        raw_pickle = base64.b64decode(token_b64)
+        credentials = pickle.loads(raw_pickle)
+        print("[✓] Token successfully loaded from YOUTUBE_TOKEN_PICKLE environment variable!")
     except Exception as e:
-        print(f"[X] ERROR: Token decode nahi ho saka: {e}")
-        sys.exit(1)
+        print(f"[!] Error decoding base64 pickle from env: {e}")
 
-# Key structure handle karein
-data = token_info.get("installed") or token_info.get("web") or token_info
+# B. File se check karein (agar token.pickle file banayi ho)
+if not credentials and os.path.exists("token.pickle"):
+    try:
+        with open("token.pickle", "rb") as f:
+            credentials = pickle.load(f)
+        print("[✓] Token successfully loaded from token.pickle file!")
+    except Exception as e:
+        print(f"[!] Error reading token.pickle file: {e}")
 
-credentials = google.oauth2.credentials.Credentials(
-    token=data.get("token") or data.get("access_token"),
-    refresh_token=data.get("refresh_token"),
-    token_uri=data.get("token_uri", "https://oauth2.googleapis.com/token"),
-    client_id=data.get("client_id"),
-    client_secret=data.get("client_secret")
-)
+if not credentials:
+    print("[X] ERROR: YouTube Credentials load nahi ho sake! Check YOUTUBE_TOKEN_PICKLE.")
+    sys.exit(1)
+
+# 3. Agar token expire ho gaya ho to auto-refresh karein
+if credentials.expired and credentials.refresh_token:
+    print("[*] Token expired, refreshing credentials...")
+    credentials.refresh(google.auth.transport.requests.Request())
+    print("[✓] Token refreshed successfully!")
 
 youtube = build("youtube", "v3", credentials=credentials)
 
-# 3. Schedule Time: 6:00 PM PKT (13:00 UTC)
+# 4. Schedule Time: 6:00 PM PKT (13:00 UTC)
 now_utc = datetime.datetime.now(datetime.timezone.utc)
 target_utc = now_utc.replace(hour=13, minute=0, second=0, microsecond=0)
 
@@ -79,7 +76,7 @@ if now_utc >= target_utc:
 publish_at_iso = target_utc.isoformat().replace("+00:00", "Z")
 print(f"[*] Scheduled Release: 6:00 PM PKT ({publish_at_iso})")
 
-# 4. Upload to YouTube
+# 5. Upload Video to YouTube
 body = {
     "snippet": {
         "title": title[:100],
@@ -94,7 +91,7 @@ body = {
     }
 }
 
-print("[*] Uploading video to YouTube...")
+print(f"[*] Uploading {VIDEO_PATH} ({os.path.getsize(VIDEO_PATH)/(1024*1024):.2f} MB) to YouTube...")
 media = MediaFileUpload(VIDEO_PATH, chunksize=-1, resumable=True, mimetype="video/mp4")
 
 request = youtube.videos().insert(
@@ -107,7 +104,7 @@ response = request.execute()
 video_id = response.get("id")
 
 print(f"\n{'='*55}")
-print(f"🎉 SUCCESS! VIDEO UPLOADED & SCHEDULED!")
+print(f"🎉 ALHAMDULILLAH! VIDEO UPLOADED & SCHEDULED!")
 print(f"Video URL: https://youtu.be/{video_id}")
 print(f"Scheduled Release: 6:00 PM PKT")
 print(f"{'='*55}\n")
