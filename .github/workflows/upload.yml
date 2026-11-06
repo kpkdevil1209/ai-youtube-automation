@@ -19,7 +19,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '3.11'
 
       - name: Install Base Dependencies
         run: |
@@ -57,6 +57,7 @@ jobs:
           kaggle kernels push -p ./kaggle_render
           
           echo "[*] Waiting for Kaggle T4 GPU to render Full AI Video..."
+          # 5-6 minutes tak har 15 second baad status check karein
           for i in {1..25}; do
             STATUS=$(kaggle kernels status kpkdevil/ai-video-renderer)
             echo "Attempt $i: $STATUS"
@@ -73,18 +74,15 @@ jobs:
           ls -lh final_output.mp4
           echo "[✓] Full AI Video Download Complete!"
 
-      - name: Step 6 - Decode YouTube Token
+      - name: Step 6 - Decode YouTube Token Pickle
         env:
-          YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET_JSON }}
+          YOUTUBE_TOKEN_PICKLE: ${{ secrets.YOUTUBE_TOKEN_PICKLE }}
         run: |
-          # Agar Base64 encoded ho to decode karein warna direct likhein
-          if echo "$YOUTUBE_CLIENT_SECRET" | base64 -d 2>/dev/null | grep -q "{"; then
-            echo "$YOUTUBE_CLIENT_SECRET" | base64 -d > client_secrets.json
-          else
-            echo "$YOUTUBE_CLIENT_SECRET" > client_secrets.json
-          fi
-          echo "[*] Token file ready: $(ls -lh client_secrets.json)"
+          echo "$YOUTUBE_TOKEN_PICKLE" | base64 -d > token.pickle 2>/dev/null || echo "Using direct pickle from env"
+          echo "[✓] YouTube Token Ready!"
 
       - name: Step 7 - Upload and Schedule Video for 6:00 PM PKT
+        env:
+          YOUTUBE_TOKEN_PICKLE: ${{ secrets.YOUTUBE_TOKEN_PICKLE }}
         run: |
           python upload_video.py
