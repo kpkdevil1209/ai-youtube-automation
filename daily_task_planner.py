@@ -1,70 +1,50 @@
 """
 daily_task_planner.py
-Autonomous Daily Task & Decision Engine for DEVIL Gaming Empire.
-Calculates today's exact tasks based on cadence:
-- Daily 1 Short (Hyper-pacing 1.5s cuts)
-- Long Video every 3 days (8-10 mins deep analysis)
-- Community Post every 2 days (Interactive polls for algorithm engagement)
-Outputs today_tasks.json for downstream engines.
+Autonomous Daily Task & Dynamic Timing Engine for DEVIL Gaming Empire.
+Features:
+1. Dynamic Randomized Durations:
+   - Shorts: Randomly chosen between 18.0s and 26.0s (Anti-bot natural jitter).
+   - Long Videos: Randomly chosen between 13.5 and 16.5 minutes (810s - 990s).
+2. Cadence Sync: Daily 1 Short, Long Video every 3 days, Community Poll every 2 days.
+3. Automatically computes dynamic scene counts based on exact randomized seconds.
+4. Outputs today_tasks.json for downstream audio, script and video engines.
 """
 
 import json
 import os
+import random
 from datetime import datetime, date
+from niche_brain import pick_daily_short_topic, pick_long_video_topic
 
 PROFILE_PATH = "channel_profile.json"
 OUTPUT_MANIFEST = "today_tasks.json"
 
-VIRAL_DEVIL_ANGLES = [
-    {
-        "angle_id": "devil_hacker_exposed",
-        "title_hook": "Is DEVIL Using Secret Config or Pure Reflexes?",
-        "topic": "Hacker vs Pure Skill breakdown with 1.5s fast cuts",
-        "weapon": "Desert Eagle"
-    },
-    {
-        "angle_id": "devil_m1887_one_tap_secret",
-        "title_hook": "99% Players Drag Joystick Wrong on M1887",
-        "topic": "Secret high-DPI micro drag tutorial with red damage numbers",
-        "weapon": "M1887"
-    },
-    {
-        "angle_id": "devil_1v4_impossible_revenge",
-        "title_hook": "When Squad Died and DEVIL Had 5 HP Left...",
-        "topic": "Insane 1v4 revenge clutch against full grandmaster squad",
-        "weapon": "MP40 & Shotgun"
-    },
-    {
-        "angle_id": "devil_nostalgia_2018_vs_2026",
-        "title_hook": "Did Garena Ruin Free Fire? 2018 vs 2026 Truth",
-        "topic": "Nostalgia breakdown: Old training ground vs new mechanics",
-        "weapon": "Old MP40"
-    },
-    {
-        "angle_id": "devil_secret_trick_pro_hide",
-        "title_hook": "The Banned Setting Every Free Fire Pro Hides",
-        "topic": "Camera sensitivity setting for 100% headshot accuracy",
-        "weapon": "Woodpecker"
-    }
-]
-
 def calculate_days_difference(last_date_str: str) -> int:
     if not last_date_str:
-        return 999  # First run: force execute
+        return 999
     try:
         last_date = datetime.strptime(last_date_str, "%Y-%m-%d").date()
-        today = date.today()
-        return (today - last_date).days
+        return (date.today() - last_date).days
     except Exception:
         return 999
 
+def get_randomized_short_duration() -> float:
+    """Random duration between 18.5s and 25.5s (Sweet Spot for 150%+ retention)."""
+    return round(random.uniform(18.5, 25.5), 1)
+
+def get_randomized_long_duration() -> float:
+    """Random duration between 13.8 mins and 16.2 mins (Sweet spot for high RPM & Watchtime)."""
+    return round(random.uniform(13.8, 16.2), 2)
+
 def plan_today_tasks():
     print("[*] Reading channel_profile.json...")
-    if not os.path.exists(PROFILE_PATH):
-        raise FileNotFoundError(f"{PROFILE_PATH} file nahi mili!")
-
-    with open(PROFILE_PATH, "r", encoding="utf-8") as f:
-        profile = json.load(f)
+    profile = {}
+    if os.path.exists(PROFILE_PATH):
+        try:
+            with open(PROFILE_PATH, "r", encoding="utf-8") as f:
+                profile = json.load(f)
+        except Exception:
+            pass
 
     today_str = date.today().strftime("%Y-%m-%d")
     history = profile.get("history", {})
@@ -76,65 +56,71 @@ def plan_today_tasks():
     long_interval = schedule.get("long_video_interval_days", 3)
     comm_interval = schedule.get("community_post_interval_days", 2)
 
-    # Decisions
     do_short = True
     do_long = days_since_long >= long_interval
     do_comm = days_since_comm >= comm_interval
 
-    # Select angle dynamically based on day of year
-    day_of_year = date.today().timetuple().tm_yday
-    selected_angle = VIRAL_DEVIL_ANGLES[day_of_year % len(VIRAL_DEVIL_ANGLES)]
+    short_topic = pick_daily_short_topic()
+    long_topic = pick_long_video_topic() if do_long else None
+
+    # Compute randomized durations
+    short_duration_sec = get_randomized_short_duration()
+    # Average scene length: 1.8s
+    calculated_scenes_count = max(8, int(round(short_duration_sec / 1.8)))
+
+    long_duration_mins = get_randomized_long_duration() if do_long else 0
 
     manifest = {
         "date": today_str,
         "channel_name": profile.get("channel_name", "DEVIL INSANITY"),
-        "in_game_tag": profile["content_strategy"]["in_game_name_tag"],
+        "in_game_tag": profile.get("content_strategy", {}).get("in_game_name_tag", "DEVIL-999"),
         "tasks": {
             "daily_short": {
                 "active": do_short,
-                "angle": selected_angle["angle_id"],
-                "suggested_title": selected_angle["title_hook"],
-                "topic": selected_angle["topic"],
-                "featured_weapon": selected_angle["weapon"],
-                "pacing": profile["content_strategy"]["pacing"],
-                "audio": {
-                    "primary_voice": profile["audio_persona"]["primary_voice"],
-                    "speech_rate": profile["audio_persona"]["speech_rate"],
-                    "keyboard_sfx": profile["audio_persona"]["foley_keyboard_sfx"]
-                },
+                "topic_id": short_topic["id"],
+                "topic": short_topic["name"],
+                "suggested_title": short_topic["hook"],
+                "featured_weapon": short_topic["weapon"],
+                "pacing": "1.5s_to_2.0s_fast_cuts",
+                "target_duration_sec": short_duration_sec,
+                "calculated_scenes_count": calculated_scenes_count,
                 "subtitles": ["ur", "en"]
             },
             "long_video": {
                 "active": do_long,
                 "days_since_last": days_since_long,
                 "interval_required": long_interval,
-                "estimated_duration_mins": 8 if do_long else 0,
-                "structure": "multi_chapter_in_depth_breakdown" if do_long else None
+                "topic": long_topic["title"] if do_long else None,
+                "target_duration_mins": long_duration_mins,
+                "structure": "3_act_documentary_with_midroll_anchors" if do_long else None
             },
             "community_poll": {
                 "active": do_comm,
                 "days_since_last": days_since_comm,
                 "interval_required": comm_interval,
-                "suggested_poll": {
-                    "question": f"Konsa gun 1v4 clutch ke liye best hai? 💥",
-                    "options": ["M1887 (Double Barrel)", "MP40 (Laser Spray)", "Desert Eagle (One Tap)", "Woodpecker"]
+                "poll": {
+                    "question": f"Free Fire mein {short_topic['weapon']} chalane ka best secret kya hai? 🔥",
+                    "options": ["Rotation Drag", "Straight Up Drag", "Quick Scope", "Sit Up Headshot"]
                 } if do_comm else None
             }
         }
     }
 
     print("\n==========================================")
-    print(f"[*] TODAY'S MASTER WORK PLAN: {today_str}")
-    print(f" -> Channel: {profile.get('channel_name')}")
-    print(f" -> Daily Short: [YES] {selected_angle['title_hook']}")
-    print(f" -> Long Video (Every 3 Days): {'[YES - TIME TO RENDER]' if do_long else f'[WAIT - Day {days_since_long}/{long_interval}]'}")
-    print(f" -> Community Poll (Every 2 Days): {'[YES - TIME TO POST]' if do_comm else f'[WAIT - Day {days_since_comm}/{comm_interval}]'}")
+    print(f"[*] MASTER WORK PLAN: {today_str}")
+    print(f" -> Channel: {manifest['channel_name']}")
+    print(f" -> Daily Short: [YES] {short_topic['hook']}")
+    print(f"    * Target Duration: {short_duration_sec}s (Scenes: {calculated_scenes_count})")
+    print(f" -> Long Video (Every 3 Days): {'[YES] ' + long_topic['title'] if do_long else f'[WAIT - Day {days_since_long}/{long_interval}]'}")
+    if do_long:
+        print(f"    * Target Duration: {long_duration_mins} mins (~{int(long_duration_mins*60)} seconds)")
+    print(f" -> Community Poll: {'[YES - POST POLL]' if do_comm else f'[WAIT - Day {days_since_comm}/{comm_interval}]'}")
     print("==========================================\n")
 
     with open(OUTPUT_MANIFEST, "w", encoding="utf-8") as f:
         json.dump(manifest, f, indent=2, ensure_ascii=False)
 
-    print(f"[+] Manifest successfully written to {OUTPUT_MANIFEST}!")
+    print(f"[+] Dynamic manifest written to {OUTPUT_MANIFEST}!")
 
 if __name__ == "__main__":
     plan_today_tasks()
