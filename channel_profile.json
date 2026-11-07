@@ -1,0 +1,38 @@
+{
+  "channel_id": null,
+  "channel_name": "DEVIL INSANITY",
+  "identity_theme": "devil_gaming_pro",
+  "branding_completed": false,
+  "schedule": {
+    "shorts_frequency": "daily",
+    "shorts_per_day": 1,
+    "long_video_interval_days": 3,
+    "community_post_interval_days": 2,
+    "daily_run_time_pkt": "02:00",
+    "publish_time_pkt": "18:00"
+  },
+  "content_strategy": {
+    "niche": "free_fire_gaming",
+    "primary_language": "ur",
+    "secondary_language": "en",
+    "pacing": "1.5s_fast_cuts_hyper_retention",
+    "hook_style": "micro_open_loops_with_tension",
+    "in_game_name_tag": "DEVIL-999",
+    "featured_weapons": ["M1887", "Desert Eagle", "MP40", "AWM", "Woodpecker"]
+  },
+  "audio_persona": {
+    "primary_voice": "ur-PK-AsadNeural",
+    "english_voice": "en-US-ChristopherNeural",
+    "speech_rate": "+15%",
+    "foley_keyboard_sfx": true,
+    "keyboard_volume_db": -28,
+    "bg_music_genre": "phonk_bass_gaming"
+  },
+  "history": {
+    "last_short_date": null,
+    "last_long_video_date": null,
+    "last_community_post_date": null,
+    "total_shorts_published": 0,
+    "total_long_videos_published": 0
+  }
+}
