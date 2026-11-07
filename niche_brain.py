@@ -2,28 +2,27 @@
 niche_brain.py
 Autonomous Cognitive & Psychological Brain for DEVIL Gaming.
 Implements:
-1. 0.1s Dopamine Hijack (Zero Fluff).
+1. The 0.1-second dopamine hook (No greetings / Zero fluff).
 2. Micro-Open Loops every 1.5s - 2.0s.
-3. Mathematical Infinity Retention Loop.
-4. Dual-Language Engine (Urdu/Hindi Slang + English Global).
-5. Dynamic SFX & Camera Motion tagging.
+3. Subconscious Infinity Retention Loop.
+4. Dual-Language Engine (Urdu/Hindi Pro Gamer Voiceover + English Global Voiceover).
+5. Dynamic Word-by-Word Subtitle Timing Engine.
 """
 
-import json
-
 VIRAL_PSYCHOLOGY_FRAMEWORK = """
-[STRICT SYSTEM ROLE: WORLD-CLASS VIRAL SHORT SCREENWRITER]
-You are an expert in behavioral psychology, dopamine loops, and Free Fire viral algorithms.
-Your job is to generate a high-octane, hyper-retained YouTube Short script in STRICT JSON.
+[STRICT SYSTEM ROLE: WORLD-CLASS VIRAL SHORT SCREENWRITER & HUMAN PSYCHOLOGIST]
+You write hyper-addictive, ultra-viral Free Fire YouTube Shorts scripts.
+Your target is 150%+ audience retention.
 
-RULES OF RETENTION (FOLLOW 100%):
-1. ZERO INTRODUCTIONS: NEVER write "Hello", "Welcome", "Aaj hum", or "Dosto". Start directly with an aggressive shock statement.
-2. MICRO-OPEN LOOPS: Every scene must last between 1.5 to 2.0 seconds. Each scene must raise an unanswered tension question leading directly into the next scene.
-3. THE INFINITY LOOP: The final scene's last sentence must end with an incomplete connector that flows grammatically and seamlessly straight back into Scene 1's opening word!
-4. DUAL-LANGUAGE REQUIREMENT:
-   - "narration_urdu": Authentic fast gamer slang in Roman Urdu (words like: clutch, one-tap, hacker, scene, banda, garena, headshot, khalaas, OP).
-   - "narration_en": Punchy, short English translation for international subtitles.
-5. SFX & ACTION TAGGING: Every scene must have a precise SFX trigger and camera motion.
+MANDATORY RULES:
+1. ZERO GREETINGS: NEVER write "Hello", "Welcome", "Dosto", or "Aaj hum". The first word must punch the viewer in the face with controversy or a high-stakes question.
+2. MICRO-OPEN LOOPS (1.5s - 2.0s): Every single scene MUST end with an unanswered curiosity hook that forces the human brain to watch the next 2 seconds.
+3. POLARIZATION TRIGGER: Create subtle controversy (e.g. "Did he use config or is he a god?", "99% of players are doing this wrong").
+4. THE INFINITY LOOP: The final sentence in Scene 5 MUST be a bridge phrase that seamlessly grammar-connects straight back into Scene 1's very first word!
+5. DUAL-LANGUAGE REQUIREMENT:
+   - "narration_urdu": Authentic fast gamer slang in Roman Urdu (words: clutch, one-tap, hacker, scene, banda, garena, headshot, khalaas, OP).
+   - "narration_en": Punchy, energetic international gaming voiceover line (under 8 words per scene).
+   - "subtitle_en": Word-by-word synchronized English subtitle.
 """
 
 def build_retention_prompt(manifest: dict) -> str:
@@ -37,29 +36,30 @@ def build_retention_prompt(manifest: dict) -> str:
     prompt = f"""
 {VIRAL_PSYCHOLOGY_FRAMEWORK}
 
-[CONTEXT FOR THIS VIDEO]
+[INPUT CONTEXT]
 Channel: {channel_name}
 Player Tag: {in_game_tag}
-Gun Featured: {featured_weapon}
+Featured Weapon: {featured_weapon}
 Topic Angle: {topic}
 Title Idea: {title_hook}
 
 Generate an explosive 5-scene Short script. Total duration must be 9 to 10 seconds (5 scenes x 1.8s-2.0s).
 
-OUTPUT STRICT JSON ONLY (No Markdown ticks, no chat, just valid parseable JSON):
+OUTPUT STRICT JSON ONLY (No markdown ticks, no preamble, only valid JSON):
 {{
-  "title_urdu": "Urdu/Hindi viral title (e.g. Kya DEVIL Hacker Hai Ya World Record?)",
+  "title_urdu": "Shocking Urdu/Hindi title",
   "title_en": "{title_hook}",
   "description_en": "High CTR global description with hashtags #FreeFire #Shorts #DEVIL999 #Clutch",
   "in_game_tag": "{in_game_tag}",
-  "infinity_loop_phrase": "Connector connecting scene 5 back to scene 1",
+  "infinity_loop_connector": "The exact bridge phrase connecting Scene 5 back to Scene 1",
   "scenes": [
     {{
       "scene_num": 1,
       "duration_sec": 1.8,
-      "tension_trigger": "Shocking accusation / visual tension",
-      "narration_urdu": "Short explosive Urdu line under 7 words",
-      "narration_en": "Short English subtitle under 7 words",
+      "tension_trigger": "Explosive controversy / shock accusation",
+      "narration_urdu": "Punched Urdu line under 7 words",
+      "narration_en": "Punchy English voiceover line under 7 words",
+      "subtitle_en": "ALL CAPS SHORT SUBTITLE",
       "visual_action": "Fast 1887 crosshair lock and jump",
       "camera_motion": "fast_zoom_in",
       "sfx": "vine_boom"
@@ -67,9 +67,10 @@ OUTPUT STRICT JSON ONLY (No Markdown ticks, no chat, just valid parseable JSON):
     {{
       "scene_num": 2,
       "duration_sec": 1.8,
-      "tension_trigger": "Sudden unanswered question",
-      "narration_urdu": "Urdu question under 7 words",
-      "narration_en": "English subtitle under 7 words",
+      "tension_trigger": "Garena / Inspection tension",
+      "narration_urdu": "Urdu question or mystery under 7 words",
+      "narration_en": "English mystery line under 7 words",
+      "subtitle_en": "ALL CAPS SHORT SUBTITLE",
       "visual_action": "Freeze frame on enemy helmet",
       "camera_motion": "micro_screen_shake",
       "sfx": "bass_drop"
@@ -77,19 +78,21 @@ OUTPUT STRICT JSON ONLY (No Markdown ticks, no chat, just valid parseable JSON):
     {{
       "scene_num": 3,
       "duration_sec": 2.0,
-      "tension_trigger": "High stakes proof",
-      "narration_urdu": "Urdu line under 8 words",
-      "narration_en": "English subtitle under 8 words",
-      "visual_action": "Bullet fires, red damage number 550 appears",
+      "tension_trigger": "Red number damage proof",
+      "narration_urdu": "Urdu proof line under 8 words",
+      "narration_en": "English proof line under 8 words",
+      "subtitle_en": "ALL CAPS SHORT SUBTITLE",
+      "visual_action": "Bullet connects, red damage 550 appears",
       "camera_motion": "slow_motion_snap",
       "sfx": "hitmarker"
     }},
     {{
       "scene_num": 4,
       "duration_sec": 1.8,
-      "tension_trigger": "The shocking revelation",
-      "narration_urdu": "Urdu line under 7 words",
-      "narration_en": "English subtitle under 7 words",
+      "tension_trigger": "DEVIL signature clutch moment",
+      "narration_urdu": "Urdu clutch line under 7 words",
+      "narration_en": "English clutch line under 7 words",
+      "subtitle_en": "ALL CAPS SHORT SUBTITLE",
       "visual_action": "Kill feed badge DEVIL-999 pop-up",
       "camera_motion": "flash_transition",
       "sfx": "gun_cock"
@@ -97,10 +100,11 @@ OUTPUT STRICT JSON ONLY (No Markdown ticks, no chat, just valid parseable JSON):
     {{
       "scene_num": 5,
       "duration_sec": 2.0,
-      "tension_trigger": "Infinity loop bridge to Scene 1",
-      "narration_urdu": "Urdu connector leading back to Scene 1",
-      "narration_en": "English connector line",
-      "visual_action": "High speed whip pan back to opening frame",
+      "tension_trigger": "Infinity loop bridge leading back to Scene 1",
+      "narration_urdu": "Incomplete Urdu phrase connecting to Scene 1",
+      "narration_en": "Incomplete English bridge phrase connecting to Scene 1",
+      "subtitle_en": "ALL CAPS SHORT SUBTITLE",
+      "visual_action": "Fast whip pan leading straight to opening frame",
       "camera_motion": "whip_pan",
       "sfx": "whoosh"
     }}
