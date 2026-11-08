@@ -1,13 +1,9 @@
 """
 daily_task_planner.py
 Autonomous Daily Task & Dynamic Timing Engine for DEVIL Gaming Empire.
-Features:
-1. Dynamic Randomized Durations:
-   - Shorts: Randomly chosen between 18.0s and 26.0s (Anti-bot natural jitter).
-   - Long Videos: Randomly chosen between 13.5 and 16.5 minutes (810s - 990s).
-2. Cadence Sync: Daily 1 Short, Long Video every 3 days, Community Poll every 2 days.
-3. Automatically computes dynamic scene counts based on exact randomized seconds.
-4. Outputs today_tasks.json for downstream audio, script and video engines.
+Randomized Timing Logic:
+- Shorts: Randomly chosen between 18.5s and 25.5s (Sweet-spot for 150%+ retention).
+- Long Videos: Randomly chosen between 13.8m and 16.2m (~15 mins for high RPM & Watchtime).
 """
 
 import json
@@ -29,11 +25,9 @@ def calculate_days_difference(last_date_str: str) -> int:
         return 999
 
 def get_randomized_short_duration() -> float:
-    """Random duration between 18.5s and 25.5s (Sweet Spot for 150%+ retention)."""
     return round(random.uniform(18.5, 25.5), 1)
 
 def get_randomized_long_duration() -> float:
-    """Random duration between 13.8 mins and 16.2 mins (Sweet spot for high RPM & Watchtime)."""
     return round(random.uniform(13.8, 16.2), 2)
 
 def plan_today_tasks():
@@ -63,11 +57,8 @@ def plan_today_tasks():
     short_topic = pick_daily_short_topic()
     long_topic = pick_long_video_topic() if do_long else None
 
-    # Compute randomized durations
     short_duration_sec = get_randomized_short_duration()
-    # Average scene length: 1.8s
     calculated_scenes_count = max(8, int(round(short_duration_sec / 1.8)))
-
     long_duration_mins = get_randomized_long_duration() if do_long else 0
 
     manifest = {
@@ -110,10 +101,10 @@ def plan_today_tasks():
     print(f"[*] MASTER WORK PLAN: {today_str}")
     print(f" -> Channel: {manifest['channel_name']}")
     print(f" -> Daily Short: [YES] {short_topic['hook']}")
-    print(f"    * Target Duration: {short_duration_sec}s (Scenes: {calculated_scenes_count})")
+    print(f"    * Randomized Duration: {short_duration_sec}s ({calculated_scenes_count} scenes)")
     print(f" -> Long Video (Every 3 Days): {'[YES] ' + long_topic['title'] if do_long else f'[WAIT - Day {days_since_long}/{long_interval}]'}")
     if do_long:
-        print(f"    * Target Duration: {long_duration_mins} mins (~{int(long_duration_mins*60)} seconds)")
+        print(f"    * Randomized Duration: {long_duration_mins} mins")
     print(f" -> Community Poll: {'[YES - POST POLL]' if do_comm else f'[WAIT - Day {days_since_comm}/{comm_interval}]'}")
     print("==========================================\n")
 
