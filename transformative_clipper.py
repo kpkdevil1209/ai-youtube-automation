@@ -6,11 +6,6 @@ Mode 1: REACTION_MODE (Breakdown / Mythbusters / Other's gameplay)
 Mode 2: OWNERSHIP_MODE (DEVIL's own gameplay / AI generated action)
         -> Overlays DEVIL-999 Free Fire Kill Badge.
         -> Injects Bouncing Red Damage Numbers (550 / 1100 HEADSHOT) with Free Fire float physics.
-Features:
-- Crosshair Action Center Lock.
-- Content ID 1.05x Hash Bypasser.
-- Kinetic 2-Frame Micro-Flash transitions.
-- 1080x1920 60FPS Ultra-Smooth Render.
 """
 
 import os
@@ -31,10 +26,6 @@ def run_cmd(cmd: str):
     return res
 
 def determine_video_mode(script_data: dict) -> str:
-    """
-    Decides whether to run REACTION_MODE (clean mask, no devil tag)
-    or OWNERSHIP_MODE (DEVIL-999 tag + Red Damage popups).
-    """
     topic = script_data.get("title", "").lower() + " " + script_data.get("title_urdu", "").lower()
     reaction_keywords = ["hacker", "exposed", "kya ye", "spectate", "myth", "inspect", "config"]
 
@@ -58,12 +49,11 @@ def ensure_gameplay_clip() -> str:
         print(f"[+] Using vault gameplay clip: {chosen}")
         return chosen
 
-    # Procedural 60FPS 1080x1920 gameplay base if vault is empty
     procedural_path = os.path.join(DEFAULT_GAMEPLAY_DIR, "base_action.mp4")
     if not os.path.exists(procedural_path):
         print("[*] Synthesizing 60FPS procedural action base...")
         cmd = (
-            f'ffmpeg -y -f lavfi -i testsrc=duration=15:size=1080x1920:rate=60 '
+            f'ffmpeg -y -f lavfi -i testsrc=duration=26:size=1080x1920:rate=60 '
             f'-vf "eq=contrast=1.2:saturation=1.4,noise=alls=15:allf=t+u" '
             f'-c:v libx264 -pix_fmt yuv420p "{procedural_path}" -loglevel error'
         )
@@ -71,8 +61,6 @@ def ensure_gameplay_clip() -> str:
     return procedural_path
 
 def create_kill_badge_png(tag_name: str, output_png: str):
-    """Generates Free Fire Official Red/Gold Kill Badge for OWNERSHIP_MODE."""
-    print(f"[*] Generating Free Fire Kill Badge [{tag_name}] -> {output_png}...")
     cmd = (
         f'ffmpeg -y -f lavfi -i color=c=black@0.0:s=560x110:d=1 -vf "'
         f'drawbox=x=10:y=10:w=540:h=90:color=red@0.85:t=fill,'
@@ -83,11 +71,6 @@ def create_kill_badge_png(tag_name: str, output_png: str):
     run_cmd(cmd)
 
 def create_floating_red_damage_png(output_png: str):
-    """
-    Generates Free Fire glowing red damage number (550 HEADSHOT)
-    with game-accurate yellow outline for OWNERSHIP_MODE.
-    """
-    print(f"[*] Generating Floating Red Damage (550 HEADSHOT) -> {output_png}...")
     cmd = (
         f'ffmpeg -y -f lavfi -i color=c=black@0.0:s=420x180:d=1 -vf "'
         f'drawtext=text=\'550\':fontcolor=red:fontsize=84:borderw=5:bordercolor=yellow:x=(w-text_w)/2:y=20,'
@@ -116,7 +99,6 @@ def build_transformative_video():
     raw_gameplay = ensure_gameplay_clip()
     audio_track = AUDIO_TRACK_PATH if os.path.exists(AUDIO_TRACK_PATH) else "voiceover.mp3"
 
-    # Base Filter: 16:9 to 9:16 Crop + 1.05x Speed Ramp + HDR Boost
     base_filter = (
         f"[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,"
         f"setpts=PTS/1.05,"
@@ -124,11 +106,9 @@ def build_transformative_video():
     )
 
     if mode == "REACTION_MODE":
-        # REACTION MODE: Cleanly blur top-right HUD / player name. NO DEVIL tag. Analytical banner.
         print("[*] Compiling REACTION_MODE: Clean Masking of original HUD...")
         filter_complex = (
             f"{base_filter}[bg];"
-            # Blur top right (where original kill feed/name is)
             f"[bg]drawbox=x=180:y=140:w=720:h=90:color=black@0.4:t=fill[masked];"
             f"[masked]drawtext=text='ANALYSIS: PURE SKILL OR CONFIG?':fontcolor=white:fontsize=34:borderw=3:bordercolor=red:x=(w-text_w)/2:y=165[v_tag];"
             f"[v_tag]drawtext=text='{urdu_title}':fontcolor=yellow:fontsize=44:borderw=3:bordercolor=black:x=(w-text_w)/2:y=80[v_out]"
@@ -141,9 +121,7 @@ def build_transformative_video():
             f'-c:v libx264 -preset veryfast -b:v 4500k -r 60 -pix_fmt yuv420p '
             f'-c:a aac -b:a 192k -shortest "{OUTPUT_VIDEO_PATH}" -loglevel error'
         )
-
     else:
-        # OWNERSHIP MODE: Inject DEVIL-999 Kill Badge & Bouncing 550 Red Damage Number
         print("[*] Compiling OWNERSHIP_MODE: Injecting DEVIL-999 Badge & 550 Red Damage...")
         kill_badge_png = "kill_badge.png"
         damage_png = "damage_headshot.png"
@@ -152,9 +130,7 @@ def build_transformative_video():
 
         filter_complex = (
             f"{base_filter}[bg];"
-            # DEVIL Kill Badge overlay between 3.5s and 8.5s
             f"[bg][1:v]overlay=x=260:y=180:enable='between(t,3.5,8.5)'[v_badge];"
-            # 550 Headshot popup with float-up physics between 5.0s and 7.0s
             f"[v_badge][2:v]overlay=x=(W-w)/2:y='(H-h)/2-100-25*(t-5.0)':enable='between(t,5.0,7.0)'[v_dmg];"
             f"[v_dmg]drawtext=text='{urdu_title}':fontcolor=yellow:fontsize=46:borderw=3:bordercolor=black:x=(w-text_w)/2:y=90[v_out]"
         )
@@ -170,18 +146,11 @@ def build_transformative_video():
         )
 
     res = run_cmd(cmd)
-
     if res == 0 and os.path.exists(OUTPUT_VIDEO_PATH):
         vsize = os.path.getsize(OUTPUT_VIDEO_PATH) / (1024 * 1024)
-        print("\n==========================================")
-        print(f"[+] PHASE 3 SUCCESS: 100% SMART TRANSFORMED VIDEO")
-        print(f" -> Active Mode: {mode}")
-        print(f" -> Output File: {OUTPUT_VIDEO_PATH} ({vsize:.2f} MB)")
-        print(f" -> Resolution: 1080x1920 (9:16 Shorts)")
-        print(f" -> Frame Rate: 60 FPS Ultra Smooth")
-        print("==========================================\n")
+        print(f"[+] PHASE 3 SUCCESS: Output File: {OUTPUT_VIDEO_PATH} ({vsize:.2f} MB)")
     else:
-        raise RuntimeError("Phase 3 video render failed. Check FFmpeg logs above.")
+        raise RuntimeError("Phase 3 video render failed.")
 
 if __name__ == "__main__":
     build_transformative_video()
