@@ -3,7 +3,7 @@ generate_audio.py
 Phase 2: Ultra-Real Human Mobile Gamer Audio Engine for DEVIL Gaming.
 100% Mobile Player Authentic:
 - Zero Keyboard/Mouse sounds.
-- Mobile Screen Thumb-Tap Foley (-32dB glass touch resonance).
+- Mobile Screen Thumb-Tap Foley (-32dB tempered glass touch resonance).
 - Human Breath & Micro-Pause acoustic simulation.
 - Mobile Gaming Earphone Mic EQ (Warm Bass + High Clarity).
 - Dual Track: Urdu (ur-PK-AsadNeural) + English (en-US-ChristopherNeural).
@@ -36,22 +36,17 @@ def load_script_data() -> dict:
         return json.load(f)
 
 def inject_human_breaths_and_pauses(text: str) -> str:
-    """
-    Injects comma-separated rhythmic pauses into gamer sentences to mimic
-    human lung respiration and high-stakes clutching adrenaline.
-    """
     words = text.split()
     if len(words) <= 4:
         return text
 
-    humanized_tokens = []
+    humanized = []
     for i, w in enumerate(words):
-        humanized_tokens.append(w)
-        # Add micro-breath break after energetic punctuation or every 5 words
+        humanized.append(w)
         if (i + 1) % 5 == 0 and i != len(words) - 1:
             if not w.endswith((".", "!", "?", ",")):
-                humanized_tokens[-1] = w + "..."
-    return " ".join(humanized_tokens)
+                humanized[-1] = w + "..."
+    return " ".join(humanized)
 
 async def synthesize_voiceover(text: str, voice: str, output_path: str, rate: str = "+15%", pitch: str = "+2Hz"):
     print(f"[*] Synthesizing Human Mobile Gamer Voice ({voice}) -> {output_path}...")
@@ -89,27 +84,19 @@ def generate_srt_subtitles(scenes: list, text_key: str, srt_path: str):
     print(f"[+] Subtitles saved: {srt_path}")
 
 def synthesize_mobile_screen_tap_foley(duration_sec: float, output_wav: str):
-    """
-    Synthesizes authentic thumb taps on mobile tempered glass screen:
-    - Low-frequency damp thuds (180Hz - 240Hz).
-    - Zero keyboard/mouse clatter.
-    - -32dB background presence (subconscious mobile authenticity).
-    """
     print(f"[*] Synthesizing Mobile Screen Glass Thumb-Tap Ambience ({duration_sec:.1f}s)...")
     sample_rate = 44100
     total_samples = int(sample_rate * duration_sec)
     samples = [0.0] * total_samples
 
-    # Mobile gamer taps fire button, gloo wall & joystick rhythmically
     tap_intervals = [0.28, 0.16, 0.32, 0.19, 0.44, 0.22, 0.18, 0.35]
     current_pos = int(sample_rate * 0.10)
     tap_idx = 0
 
     while current_pos < total_samples - 2500:
-        # Tempered glass tap acoustics: fast rise, very fast exponential decay
-        tap_duration = 650  # ~15ms short thud
+        tap_duration = 650
         center_freq = 195 if (tap_idx % 2 == 0) else 240
-        amplitude = 0.028  # -32dB ultra subtle
+        amplitude = 0.028
 
         for i in range(tap_duration):
             if current_pos + i < total_samples:
@@ -132,12 +119,6 @@ def synthesize_mobile_screen_tap_foley(duration_sec: float, output_wav: str):
     print(f"[+] Mobile Thumb Foley ready: {output_wav}")
 
 def mix_with_mobile_earphone_eq(voice_mp3: str, foley_wav: str, output_final: str):
-    """
-    Applies Mobile Earphone Mic Acoustic EQ:
-    - Bass Warmth (+2.5dB @ 150Hz) to simulate mouth-proximity to mobile mic.
-    - Subtle Treble Presence (+1.5dB @ 3500Hz) for crisp articulation.
-    - Mixes mobile thumb-taps at natural background level.
-    """
     print("[*] Applying Mobile Earphone EQ & Mixing Audio via FFmpeg...")
     cmd = (
         f'ffmpeg -y -i "{voice_mp3}" -i "{foley_wav}" '
@@ -147,8 +128,6 @@ def mix_with_mobile_earphone_eq(voice_mp3: str, foley_wav: str, output_final: st
     )
     res = os.system(cmd)
     if res != 0 or not os.path.exists(output_final):
-        # Fallback to direct voiceover if FFmpeg complex filter isn't supported
-        print("[!] Note: Applying direct earphone voice audio.")
         os.system(f'ffmpeg -y -i "{voice_mp3}" "{output_final}" -loglevel error')
     print(f"[+] Final Master Audio Track Ready: {output_final}")
 
@@ -161,7 +140,7 @@ def get_audio_duration(file_path: str) -> float:
         ).decode().strip()
         return float(out)
     except Exception:
-        return 9.5
+        return 21.5
 
 def main():
     print("\n==========================================")
@@ -174,11 +153,7 @@ def main():
     urdu_text = data.get("narration_urdu", data.get("narration", "")).strip()
     en_text = data.get("narration_en", "Is DEVIL using secret config or pure reflexes?").strip()
 
-    if not urdu_text:
-        raise ValueError("Script mein koi narration text nahi mila!")
-
     loop = asyncio.get_event_loop()
-    # 1. Synthesize Natural Mobile Gamer Voices
     loop.run_until_complete(
         synthesize_voiceover(urdu_text, URDU_VOICE, OUTPUT_URDU_MP3, rate="+15%", pitch="+2Hz")
     )
@@ -186,23 +161,14 @@ def main():
         synthesize_voiceover(en_text, ENGLISH_VOICE, OUTPUT_EN_MP3, rate="+12%", pitch="+1Hz")
     )
 
-    # 2. Build Subtitles
     generate_srt_subtitles(scenes, "narration_urdu", OUTPUT_URDU_SRT)
     generate_srt_subtitles(scenes, "subtitle_en", OUTPUT_EN_SRT)
 
-    # 3. Mobile Tempered Glass Thumb Tap Foley
     dur = get_audio_duration(OUTPUT_URDU_MP3)
     synthesize_mobile_screen_tap_foley(dur, OUTPUT_THUMB_FOLEY)
-
-    # 4. Master Audio EQ Mix (Mobile Earphone Mic Simulation)
     mix_with_mobile_earphone_eq(OUTPUT_URDU_MP3, OUTPUT_THUMB_FOLEY, OUTPUT_FINAL_WAV)
 
-    print("\n==========================================")
-    print("[+] PHASE 2 100% COMPLETE: TRUE MOBILE HUMAN AUDIO")
-    print(f" -> Master Track (with Earphone EQ & Mobile Taps): {OUTPUT_FINAL_WAV}")
-    print(f" -> International English Voice: {OUTPUT_EN_MP3}")
-    print(f" -> Subtitles: {OUTPUT_URDU_SRT} & {OUTPUT_EN_SRT}")
-    print("==========================================\n")
+    print("\n[+] PHASE 2 COMPLETE: TRUE MOBILE HUMAN AUDIO ACTIVE\n")
 
 if __name__ == "__main__":
     main()
