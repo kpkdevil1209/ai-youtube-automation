@@ -1,112 +1,132 @@
 """
 niche_brain.py
-Autonomous Cognitive & Psychological Brain for DEVIL Gaming.
-Implements:
-1. The 0.1-second dopamine hook (No greetings / Zero fluff).
-2. Micro-Open Loops every 1.5s - 2.0s.
-3. Subconscious Infinity Retention Loop.
-4. Dual-Language Engine (Urdu/Hindi Pro Gamer Voiceover + English Global Voiceover).
-5. Dynamic Word-by-Word Subtitle Timing Engine.
+Autonomous Cognitive Master Brain for DEVIL Gaming.
+Integrates:
+- 30 Infinite Shorts Topics (10M+ Views Potential).
+- 20 Deep Long Video Topics (14-16 Minutes High RPM & Watchtime).
+- 65 Psychological Strategies (35 Shorts + 30 Long Videos).
+- Dual-Language Engine (Urdu/Hindi Gamer Slang + English Global Subtitles).
+- Dynamic Scene Count Adapter (Matches daily_task_planner randomized seconds).
 """
 
-VIRAL_PSYCHOLOGY_FRAMEWORK = """
-[STRICT SYSTEM ROLE: WORLD-CLASS VIRAL SHORT SCREENWRITER & HUMAN PSYCHOLOGIST]
-You write hyper-addictive, ultra-viral Free Fire YouTube Shorts scripts.
-Your target is 150%+ audience retention.
+import json
+from datetime import date
+
+SHORTS_TOPICS = [
+    {"id": "st_01", "name": "Banned Sensitivity Myth", "weapon": "Desert Eagle", "hook": "Is This Secret Sensitivity Setting Banned by Garena?"},
+    {"id": "st_02", "name": "M1887 vs Desert Eagle Drag", "weapon": "M1887", "hook": "99% Players Drag M1887 Joystick Wrong!"},
+    {"id": "st_03", "name": "Hacker vs Pure Reflexes", "weapon": "Woodpecker", "hook": "Hacker Config or World Record Reflexes?"},
+    {"id": "st_04", "name": "Old Free Fire 2018 vs 2026", "weapon": "Old MP40", "hook": "Did Garena Ruin the Old Free Fire?"},
+    {"id": "st_05", "name": "Dark Secrets of Sakura & Criminal", "weapon": "M1887", "hook": "Why are These Free Fire IDs Selling for Millions?"},
+    {"id": "st_06", "name": "Impossible 10 HP 1v4 Revenge", "weapon": "MP40 & Shotgun", "hook": "When Squad Died and DEVIL Had 10 HP Left..."},
+    {"id": "st_07", "name": "Top 3 Mistakes 99% Players Make", "weapon": "Shotgun", "hook": "Stop Doing This 1 Gloo Wall Mistake!"},
+    {"id": "st_08", "name": "Secret Bermuda Rank Glitches", "weapon": "AWM", "hook": "The Hidden Rank Spot Nobody Can See!"},
+    {"id": "st_09", "name": "Unbeatable Skill Combo 2026", "weapon": "Tatsuya & Homer", "hook": "This 4-Character Combo Has 100% Win Rate!"},
+    {"id": "st_10", "name": "Phone DPI Truth & Touch Speed", "weapon": "Desert Eagle", "hook": "Does High DPI Ruin Your Mobile Screen?"},
+    {"id": "st_11", "name": "Ghost Gloo Wall Finger Speed", "weapon": "M1887", "hook": "The 0.1s Fast Switch Gloo Wall Trick!"},
+    {"id": "st_12", "name": "3-Bullet Recoil Reset Secret", "weapon": "MP40", "hook": "The 3-Bullet Rule That Never Misses Head!"},
+    {"id": "st_13", "name": "Solo vs Squad Grandmaster Rotation", "weapon": "Woodpecker", "hook": "How Tournament Pros Wipe Squads Silently!"},
+    {"id": "st_14", "name": "Two-Finger vs 4-Finger Fire Button Size", "weapon": "Desert Eagle", "hook": "Why Fire Button at 42% Changes Everything!"},
+    {"id": "st_15", "name": "Unheard Footstep Clues Secret", "weapon": "M1887", "hook": "How to Hear Enemies Through Walls with Sound!"},
+    {"id": "st_16", "name": "Instant Character Skill Counters", "weapon": "Shotgun", "hook": "The Instant Trick to Counter Chrono Shield!"},
+    {"id": "st_17", "name": "Double AWM No-Reload God Mode", "weapon": "AWM", "hook": "How to Shoot Double AWM Without Reload!"},
+    {"id": "st_18", "name": "Factory Roof Fist Fight Timing", "weapon": "Fist", "hook": "The Exact Angle for 1-Tap Fist Punch!"},
+    {"id": "st_19", "name": "Auto-Headshot Panel Scam Exposed", "weapon": "M1887", "hook": "The Truth Behind Auto Headshot Panels!"},
+    {"id": "st_20", "name": "Last Zone Medkit vs Inhaler Timing", "weapon": "Inhaler", "hook": "The 0.5s Critical Window to Survive Last Zone!"},
+    {"id": "st_21", "name": "Spectating Grandmaster Suspicious Moments", "weapon": "Woodpecker", "hook": "Did He Just Lock Headshot Through Smoke?"},
+    {"id": "st_22", "name": "Instant Karma on Toxic Emote Spammer", "weapon": "M1887", "hook": "He Was Emoting Until This One Tap Happened!"},
+    {"id": "st_23", "name": "World Fastest M1887 Two-Tap Breakdown", "weapon": "M1887", "hook": "Is This Finger Speed Even Humanly Possible?"},
+    {"id": "st_24", "name": "Toxic Squad Wiped After Emoting", "weapon": "MP40", "hook": "They Emoted on Teammate, So DEVIL Did This..."},
+    {"id": "st_25", "name": "Top 3 Impossible 1v4 Clutches", "weapon": "Shotgun & Desert", "hook": "Top 3 Clutches That Shocked Garena Servers!"},
+    {"id": "st_26", "name": "1000 IQ Big Brain Trap Play", "weapon": "Landmine & M1887", "hook": "The Dirtiest Big Brain Trap in Free Fire!"},
+    {"id": "st_27", "name": "Old Clock Tower Nostalgia Rush", "weapon": "Old MP40", "hook": "Only Old Players Remember This Clock Tower Fight!"},
+    {"id": "st_28", "name": "Double Sniper Only Headshot God Mode", "weapon": "Double AWM", "hook": "No Scope Double Sniper Wipes Entire Lobby!"},
+    {"id": "st_29", "name": "Official Tournament Shocking Fails", "weapon": "Woodpecker", "hook": "The Most Embarrassing Pro Esports Mistake!"},
+    {"id": "st_30", "name": "1 HP Miracle Comeback Clutch", "weapon": "M1887", "hook": "1 HP Left vs Full Grandmaster Squad!"}
+]
+
+LONG_VIDEO_TOPICS = [
+    {"id": "lt_01", "title": "The Complete History of Free Fire: From 2017 Golden Era to 2026", "suggested_mins": 15.2},
+    {"id": "lt_02", "title": "Top 10 Richest Free Fire Accounts in the World (Millions of Dollars)", "suggested_mins": 14.5},
+    {"id": "lt_03", "title": "The Rise and Disappearance of Legendary Players (Raistar, B2K, Total Gaming)", "suggested_mins": 15.8},
+    {"id": "lt_04", "title": "Free Fire Mythbusters: Testing 50 Viral Headshot & Glitch Myths", "suggested_mins": 14.2},
+    {"id": "lt_05", "title": "Grandmaster Solo vs Squad Masterclass: The Ultimate Game Sense Guide", "suggested_mins": 16.1},
+    {"id": "lt_06", "title": "Every Shotgun in Free Fire Ranked from Worst to God-Tier", "suggested_mins": 14.8},
+    {"id": "lt_07", "title": "The Dark Truth Behind Free Fire Esports Tournaments & Panel Bans", "suggested_mins": 15.5},
+    {"id": "lt_08", "title": "Top 8 Pro Players Battle in 1v1 Custom Room Tournament Breakdown", "suggested_mins": 14.9},
+    {"id": "lt_09", "title": "How Garena Makes Billions: The Hidden Psychology of Incubators & Events", "suggested_mins": 14.4},
+    {"id": "lt_10", "title": "The Complete Bermuda Lore: Secret Locations Garena Removed Forever", "suggested_mins": 15.0},
+    {"id": "lt_11", "title": "From Noob to Fast Switch Sniper God: Complete Double AWM Guide", "suggested_mins": 14.6},
+    {"id": "lt_12", "title": "Top 5 Secret Free Fire Glitches That Actually Changed History", "suggested_mins": 14.1},
+    {"id": "lt_13", "title": "Why 90% of Players Never Reach Grandmaster: 5 Fatal Mistakes", "suggested_mins": 15.3},
+    {"id": "lt_14", "title": "All 45+ Free Fire Character Skills Ranked: The 2026 Tier List", "suggested_mins": 16.4},
+    {"id": "lt_15", "title": "The Secret Life of Free Fire Hackers: How Scripts Work & How to Spot Them", "suggested_mins": 15.2},
+    {"id": "lt_16", "title": "Pro Player Settings Exposed: DPI, Joystick Sizes & Phone Touch Secrets", "suggested_mins": 14.5},
+    {"id": "lt_17", "title": "Top 10 Most Expensive Evolution Gun Skins in Free Fire Ranked", "suggested_mins": 14.3},
+    {"id": "lt_18", "title": "Surviving 24 Hours Only on Factory Roof: Full Documentary Challenge", "suggested_mins": 15.9},
+    {"id": "lt_19", "title": "Free Fire vs PUBG vs COD Mobile: The Brutal 2026 Comparison", "suggested_mins": 14.7},
+    {"id": "lt_20", "title": "The Unsolved Mysteries & Ghost Legends of Bermuda Map", "suggested_mins": 15.1}
+]
+
+def pick_daily_short_topic(day_offset: int = 0) -> dict:
+    day_num = date.today().timetuple().tm_yday + day_offset
+    return SHORTS_TOPICS[day_num % len(SHORTS_TOPICS)]
+
+def pick_long_video_topic(day_offset: int = 0) -> dict:
+    day_num = (date.today().timetuple().tm_yday // 3) + day_offset
+    return LONG_VIDEO_TOPICS[day_num % len(LONG_VIDEO_TOPICS)]
+
+def build_retention_prompt(manifest: dict, video_type: str = "short") -> str:
+    channel_name = manifest.get("channel_name", "DEVIL INSANITY")
+    in_game_tag = manifest.get("in_game_tag", "DEVIL-999")
+    daily_short = manifest.get("tasks", {}).get("daily_short", {})
+    target_sec = daily_short.get("target_duration_sec", 21.5)
+    scene_count = daily_short.get("calculated_scenes_count", 10)
+
+    if video_type == "long":
+        long_data = pick_long_video_topic()
+        return f"""
+[SYSTEM: 30-STRATEGY LONG VIDEO DOCUMENTARY WRITER]
+Channel: {channel_name} | Player: {in_game_tag}
+Title: {long_data['title']}
+Target Duration: ~15 Minutes
+Structure: 3 Acts with 4 Chapters. Provide full Roman Urdu narration with English subtitles.
+OUTPUT STRICT JSON.
+""".strip()
+
+    topic_data = pick_daily_short_topic()
+    prompt = f"""
+[SYSTEM: 35-STRATEGY VIRAL SHORT SCREENWRITER & PSYCHOLOGIST]
+Channel: {channel_name} | In-Game Tag: {in_game_tag}
+Topic: {topic_data['hook']} | Weapon: {topic_data['weapon']}
+Required Target Duration: Exactly {target_sec}s across {scene_count} micro-scenes (avg 1.8s - 2.1s per cut).
 
 MANDATORY RULES:
-1. ZERO GREETINGS: NEVER write "Hello", "Welcome", "Dosto", or "Aaj hum". The first word must punch the viewer in the face with controversy or a high-stakes question.
-2. MICRO-OPEN LOOPS (1.5s - 2.0s): Every single scene MUST end with an unanswered curiosity hook that forces the human brain to watch the next 2 seconds.
-3. POLARIZATION TRIGGER: Create subtle controversy (e.g. "Did he use config or is he a god?", "99% of players are doing this wrong").
-4. THE INFINITY LOOP: The final sentence in Scene 5 MUST be a bridge phrase that seamlessly grammar-connects straight back into Scene 1's very first word!
-5. DUAL-LANGUAGE REQUIREMENT:
-   - "narration_urdu": Authentic fast gamer slang in Roman Urdu (words: clutch, one-tap, hacker, scene, banda, garena, headshot, khalaas, OP).
-   - "narration_en": Punchy, energetic international gaming voiceover line (under 8 words per scene).
-   - "subtitle_en": Word-by-word synchronized English subtitle.
-"""
+1. ZERO INTRODUCTIONS: Start directly with controversy/shock.
+2. MICRO-OPEN LOOPS: Every scene must end with an unanswered question leading to the next.
+3. THE INFINITY LOOP: Scene {scene_count}'s final phrase must grammatically connect straight into Scene 1's first word.
+4. DUAL-LANGUAGE: "narration_urdu" + "narration_en" + "subtitle_en".
 
-def build_retention_prompt(manifest: dict) -> str:
-    daily_short = manifest.get("tasks", {}).get("daily_short", {})
-    topic = daily_short.get("topic", "Is DEVIL using secret one-tap config or pure reflexes?")
-    title_hook = daily_short.get("suggested_title", "Is DEVIL Using Secret Config?")
-    featured_weapon = daily_short.get("featured_weapon", "M1887")
-    in_game_tag = manifest.get("in_game_tag", "DEVIL-999")
-    channel_name = manifest.get("channel_name", "DEVIL INSANITY")
-
-    prompt = f"""
-{VIRAL_PSYCHOLOGY_FRAMEWORK}
-
-[INPUT CONTEXT]
-Channel: {channel_name}
-Player Tag: {in_game_tag}
-Featured Weapon: {featured_weapon}
-Topic Angle: {topic}
-Title Idea: {title_hook}
-
-Generate an explosive 5-scene Short script. Total duration must be 9 to 10 seconds (5 scenes x 1.8s-2.0s).
-
-OUTPUT STRICT JSON ONLY (No markdown ticks, no preamble, only valid JSON):
+OUTPUT STRICT JSON ONLY:
 {{
-  "title_urdu": "Shocking Urdu/Hindi title",
-  "title_en": "{title_hook}",
-  "description_en": "High CTR global description with hashtags #FreeFire #Shorts #DEVIL999 #Clutch",
+  "title_urdu": "{topic_data['hook']}",
+  "title_en": "{topic_data['hook']}",
+  "description_en": "{topic_data['hook']} #FreeFire #Shorts #DEVIL999 #Clutch",
   "in_game_tag": "{in_game_tag}",
-  "infinity_loop_connector": "The exact bridge phrase connecting Scene 5 back to Scene 1",
+  "target_duration_sec": {target_sec},
+  "featured_weapon": "{topic_data['weapon']}",
+  "infinity_loop_connector": "Bridge phrase from scene {scene_count} to scene 1",
   "scenes": [
     {{
       "scene_num": 1,
-      "duration_sec": 1.8,
-      "tension_trigger": "Explosive controversy / shock accusation",
+      "duration_sec": 2.0,
+      "tension_trigger": "Explosive shock hook",
       "narration_urdu": "Punched Urdu line under 7 words",
-      "narration_en": "Punchy English voiceover line under 7 words",
-      "subtitle_en": "ALL CAPS SHORT SUBTITLE",
-      "visual_action": "Fast 1887 crosshair lock and jump",
+      "narration_en": "Punchy English line under 7 words",
+      "subtitle_en": "ALL CAPS SUBTITLE",
+      "visual_action": "Fast crosshair snap and jump",
       "camera_motion": "fast_zoom_in",
       "sfx": "vine_boom"
-    }},
-    {{
-      "scene_num": 2,
-      "duration_sec": 1.8,
-      "tension_trigger": "Garena / Inspection tension",
-      "narration_urdu": "Urdu question or mystery under 7 words",
-      "narration_en": "English mystery line under 7 words",
-      "subtitle_en": "ALL CAPS SHORT SUBTITLE",
-      "visual_action": "Freeze frame on enemy helmet",
-      "camera_motion": "micro_screen_shake",
-      "sfx": "bass_drop"
-    }},
-    {{
-      "scene_num": 3,
-      "duration_sec": 2.0,
-      "tension_trigger": "Red number damage proof",
-      "narration_urdu": "Urdu proof line under 8 words",
-      "narration_en": "English proof line under 8 words",
-      "subtitle_en": "ALL CAPS SHORT SUBTITLE",
-      "visual_action": "Bullet connects, red damage 550 appears",
-      "camera_motion": "slow_motion_snap",
-      "sfx": "hitmarker"
-    }},
-    {{
-      "scene_num": 4,
-      "duration_sec": 1.8,
-      "tension_trigger": "DEVIL signature clutch moment",
-      "narration_urdu": "Urdu clutch line under 7 words",
-      "narration_en": "English clutch line under 7 words",
-      "subtitle_en": "ALL CAPS SHORT SUBTITLE",
-      "visual_action": "Kill feed badge DEVIL-999 pop-up",
-      "camera_motion": "flash_transition",
-      "sfx": "gun_cock"
-    }},
-    {{
-      "scene_num": 5,
-      "duration_sec": 2.0,
-      "tension_trigger": "Infinity loop bridge leading back to Scene 1",
-      "narration_urdu": "Incomplete Urdu phrase connecting to Scene 1",
-      "narration_en": "Incomplete English bridge phrase connecting to Scene 1",
-      "subtitle_en": "ALL CAPS SHORT SUBTITLE",
-      "visual_action": "Fast whip pan leading straight to opening frame",
-      "camera_motion": "whip_pan",
-      "sfx": "whoosh"
     }}
   ]
 }}
