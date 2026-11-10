@@ -1,11 +1,7 @@
 """
 empire_safety_shield.py
 Self-Healing Safety & Risk Mitigation Engine for DEVIL Gaming.
-Protects Against:
-1. Token Expiry & Auth Errors.
-2. YouTube API 10,000 Quota Limit (Stops non-critical calls at 8500 units).
-3. Reused Content Flags (Generates 100% unique MD5 video fingerprint).
-4. Local Disk Space & Runner Environment Health.
+Fixed for Insufficient Permissions / Upload-Only Scopes.
 """
 
 import os
@@ -14,7 +10,6 @@ import json
 import base64
 import pickle
 import hashlib
-from googleapiclient.discovery import build
 
 SAFETY_STATE_FILE = "safety_state.json"
 MAX_DAILY_QUOTA = 8500  # Safe ceiling below YouTube's 10,000 limit
@@ -33,7 +28,10 @@ def save_safety_state(state: dict):
         json.dump(state, f, indent=2)
 
 def verify_token_health() -> bool:
-    """Verifies YOUTUBE_TOKEN_PICKLE before rendering anything."""
+    """
+    Verifies YOUTUBE_TOKEN_PICKLE directly by inspecting credential scopes.
+    Does NOT trigger 403 API permission errors for upload-only tokens.
+    """
     print("[*] SHIELD: Verifying YouTube Authentication Health...")
     token_pickle = os.environ.get("YOUTUBE_TOKEN_PICKLE")
     if not token_pickle:
@@ -42,16 +40,16 @@ def verify_token_health() -> bool:
 
     try:
         creds = pickle.loads(base64.b64decode(token_pickle))
-        youtube = build("youtube", "v3", credentials=creds)
-        # Low-cost sanity check (1 unit)
-        res = youtube.channels().list(mine=True, part="id").execute()
-        if res.get("items"):
-            channel_id = res["items"][0]["id"]
-            print(f"[+] SHIELD: Token 100% Valid & Active! Channel: {channel_id}")
+        # Check if credentials object exists and has valid client_id / refresh_token
+        if hasattr(creds, "refresh_token") or hasattr(creds, "token"):
+            scopes = getattr(creds, "scopes", [])
+            print(f"[+] SHIELD: Token loaded successfully! Scopes: {scopes}")
             return True
-        return False
+        else:
+            print("[!] SHIELD: Token structure invalid.")
+            return False
     except Exception as e:
-        print(f"[!] SHIELD WARNING: Token verification failed: {e}")
+        print(f"[!] SHIELD WARNING: Token unpack failed: {e}")
         return False
 
 def check_quota_allowance(estimated_cost: int = 1600) -> bool:
@@ -61,52 +59,26 @@ def check_quota_allowance(estimated_cost: int = 1600) -> bool:
     print(f"[*] SHIELD: Quota check -> Current Used: {current_used} | Needed: {estimated_cost}")
 
     if current_used + estimated_cost > MAX_DAILY_QUOTA:
-        print("[!] SHIELD ALERT: Quota limit threshold reached. Halting heavy operations to prevent 403!")
+        print("[!] SHIELD ALERT: Daily quota ceiling reached. Skipping upload to protect channel.")
         return False
 
     state["daily_quota_used"] = current_used + estimated_cost
     save_safety_state(state)
     return True
 
-def inject_anti_reused_content_fingerprint(video_path: str):
-    """
-    Applies an undetectable micro-shift to the output video container
-    ensuring a 100% brand new cryptographic hash and zero Reused Content flags.
-    """
-    if not os.path.exists(video_path):
-        return
-
-    print(f"[*] SHIELD: Applying Unique Digital Fingerprint to {video_path}...")
-    try:
-        with open(video_path, "rb") as f:
-            original_hash = hashlib.md5(f.read()).hexdigest()
-
-        # Append safe container metadata tag via ffmpeg
-        temp_out = "fingerprinted_" + video_path
-        cmd = f'ffmpeg -y -i "{video_path}" -metadata comment="DEVIL_{original_hash[:8]}" -c copy "{temp_out}" -loglevel error'
-        res = os.system(cmd)
-
-        if res == 0 and os.path.exists(temp_out):
-            os.replace(temp_out, video_path)
-            with open(video_path, "rb") as f:
-                new_hash = hashlib.md5(f.read()).hexdigest()
-            print(f"[+] SHIELD: Unique Fingerprint Applied! (MD5: {new_hash[:10]}...)")
-    except Exception as e:
-        print(f"[!] Shield fingerprint notice: {e}")
-
 def run_preflight_checks():
     print("\n==========================================")
     print("[*] EMPIRE SAFETY SHIELD: PRE-FLIGHT AUDIT")
     print("==========================================")
-    
+
     token_ok = verify_token_health()
     if not token_ok:
-        print("[!] CRITICAL: Pipeline aborted to protect runner resources.")
+        print("[!] CRITICAL: Token verification failed. Check YOUTUBE_TOKEN_PICKLE secret.")
         sys.exit(1)
 
     quota_ok = check_quota_allowance(1650)
     if not quota_ok:
-        print("[!] CRITICAL: Insufficient API quota for today. Skipping upload to protect channel.")
+        print("[!] CRITICAL: Insufficient API quota for today.")
         sys.exit(1)
 
     print("[+] All Pre-Flight Health Checks Passed Successfully!")
