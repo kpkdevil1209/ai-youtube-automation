@@ -74,43 +74,60 @@ jobs:
           echo "{\"username\":\"$KAGGLE_USERNAME\",\"key\":\"$KAGGLE_KEY\"}" > ~/.kaggle/kaggle.json
           chmod 600 ~/.kaggle/kaggle.json
 
-      - name: Step 6 - Trigger Kaggle GPU Video Render
+      - name: Step 6 - Trigger Kaggle GPU & Smart Instant Download
         run: |
           echo "[*] Pushing code to Kaggle GPU Dual T4..."
           kaggle kernels push -p ./kaggle_render/
 
-          echo "[*] Waiting for Kaggle GPU to render 60FPS Video (Timeout 10 mins)..."
-          for i in {1..20}; do
-            STATUS=$(kaggle kernels status kpkdevil/devil-video-render-engine | grep -o 'status ".*"' | cut -d'"' -f2)
-            echo " -> Kaggle Kernel Status: $STATUS ($i/20)"
+          echo "[*] Monitoring Kaggle GPU with Smart Instant Polling (Checks every 10s)..."
+          RENDER_SUCCESS=false
+
+          for i in {1..40}; do
+            RAW_STATUS=$(kaggle kernels status kpkdevil/devil-video-render-engine 2>&1)
+            STATUS=$(echo "$RAW_STATUS" | grep -o 'status ".*"' | cut -d'"' -f2)
+            echo " -> Kaggle Kernel Status: [$STATUS] (Check #$i)"
+
             if [ "$STATUS" == "complete" ]; then
-              echo "[+] Kaggle Render Finished Successfully!"
-              break
+              echo "[+] KAGGLE CONFIRMED: Video Render Finished! Immediately grabbing output..."
+              kaggle kernels output kpkdevil/devil-video-render-engine -p ./
+              
+              if [ -f "final_output.mp4" ]; then
+                echo "[+] SUCCESS: final_output.mp4 downloaded instantly from Kaggle!"
+                RENDER_SUCCESS=true
+                break
+              else
+                echo "[!] Complete signal received but file still downloading, retrying in 5s..."
+                sleep 5
+                kaggle kernels output kpkdevil/devil-video-render-engine -p ./
+                if [ -f "final_output.mp4" ]; then
+                  RENDER_SUCCESS=true
+                  break
+                fi
+              fi
             elif [ "$STATUS" == "error" ]; then
               echo "[!] Kaggle GPU reported error!"
               kaggle kernels output kpkdevil/devil-video-render-engine
-              exit 1
+              break
             fi
-            sleep 30
+
+            # Check every 10 seconds (ultra-responsive)
+            sleep 10
           done
 
-      - name: Step 7 - Download Rendered Video from Kaggle
-        run: |
-          echo "[*] Downloading final_output.mp4 from Kaggle GPU..."
-          kaggle kernels output kpkdevil/devil-video-render-engine -p ./
-          if [ ! -f "final_output.mp4" ]; then
-            echo "[!] final_output.mp4 not found from Kaggle. Using local fallback clipper..."
+          if [ "$RENDER_SUCCESS" != "true" ]; then
+            echo "[!] Kaggle GPU did not produce final_output.mp4 in time. Activating local 60FPS fallback engine..."
             python transformative_clipper.py
           fi
+
           ls -lh final_output.mp4
 
-      - name: Step 8 - Upload & Schedule to YouTube (18:00 PKT)
+      - name: Step 7 - Upload & Schedule to YouTube (18:00 PKT)
         env:
           YOUTUBE_TOKEN_PICKLE: ${{ secrets.YOUTUBE_TOKEN_PICKLE }}
         run: |
           python upload_video.py
 
-      - name: Step 9 - Launch Live Comment Auto-Reply & Heart Bot
+      - name: Step 8 - Launch Live Comment Auto-Reply & Heart Bot
         env:
           YOUTUBE_TOKEN_PICKLE: ${{ secrets.YOUTUBE_TOKEN_PICKLE }}
         run: |
