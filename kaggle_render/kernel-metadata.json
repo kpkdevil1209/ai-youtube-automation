@@ -1,10 +1,15 @@
 {
-  "id": "kpkdevil/ai-video-renderer",
-  "title": "ai-video-renderer",
+  "id": "kpkdevil/devil-video-render-engine",
+  "title": "devil-video-render-engine",
   "code_file": "render_video.py",
   "language": "python",
   "kernel_type": "script",
   "is_private": "true",
   "enable_gpu": "true",
-  "enable_internet": "true"
+  "enable_tpu": "false",
+  "enable_internet": "true",
+  "dataset_sources": [],
+  "competition_sources": [],
+  "kernel_sources": [],
+  "model_sources": []
 }
