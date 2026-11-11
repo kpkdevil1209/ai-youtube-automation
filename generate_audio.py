@@ -1,13 +1,10 @@
 """
-generate_audio.py
-Phase 2: Ultra-Real Human Mobile Gamer Audio Engine for DEVIL Gaming.
-100% Mobile Player Authentic:
-- Zero Keyboard/Mouse sounds.
-- Mobile Screen Thumb-Tap Foley (-32dB tempered glass touch resonance).
-- Human Breath & Micro-Pause acoustic simulation.
-- Mobile Gaming Earphone Mic EQ (Warm Bass + High Clarity).
-- Dual Track: Urdu (ur-PK-AsadNeural) + English (en-US-ChristopherNeural).
-- Mathematical Word-by-Word Subtitles (subtitles.srt & subtitles_en.srt).
+generate_audio.py (Version 5.0)
+Extended Mobile Gamer Human Audio Engine.
+- Urdu Voice: ur-PK-AsadNeural (+14% speed, human respiratory micro-pauses).
+- English Subtitles: subtitles_en.srt synchronized across all 7 scenes (~28s-34s).
+- Mobile Tempered Glass Thumb-Tap Foley (-32dB resonance).
+- Mobile Earphone Mic EQ (Warmth at 150Hz + High Clarity at 3500Hz).
 """
 
 import os
@@ -43,13 +40,13 @@ def inject_human_breaths_and_pauses(text: str) -> str:
     humanized = []
     for i, w in enumerate(words):
         humanized.append(w)
-        if (i + 1) % 5 == 0 and i != len(words) - 1:
+        if (i + 1) % 6 == 0 and i != len(words) - 1:
             if not w.endswith((".", "!", "?", ",")):
                 humanized[-1] = w + "..."
     return " ".join(humanized)
 
-async def synthesize_voiceover(text: str, voice: str, output_path: str, rate: str = "+15%", pitch: str = "+2Hz"):
-    print(f"[*] Synthesizing Human Mobile Gamer Voice ({voice}) -> {output_path}...")
+async def synthesize_voiceover(text: str, voice: str, output_path: str, rate: str = "+14%", pitch: str = "+2Hz"):
+    print(f"[*] Synthesizing Human Voice ({voice}) -> {output_path}...")
     human_text = inject_human_breaths_and_pauses(text)
     communicate = edge_tts.Communicate(text=human_text, voice=voice, rate=rate, pitch=pitch)
     await communicate.save(output_path)
@@ -61,7 +58,7 @@ def generate_srt_subtitles(scenes: list, text_key: str, srt_path: str):
     entries = []
 
     for idx, sc in enumerate(scenes, start=1):
-        dur_sec = float(sc.get("duration_sec", 1.8))
+        dur_sec = float(sc.get("duration_sec", 4.0))
         dur_ms = int(dur_sec * 1000)
         start_ms = current_ms
         end_ms = start_ms + dur_ms
@@ -84,7 +81,7 @@ def generate_srt_subtitles(scenes: list, text_key: str, srt_path: str):
     print(f"[+] Subtitles saved: {srt_path}")
 
 def synthesize_mobile_screen_tap_foley(duration_sec: float, output_wav: str):
-    print(f"[*] Synthesizing Mobile Screen Glass Thumb-Tap Ambience ({duration_sec:.1f}s)...")
+    print(f"[*] Synthesizing Mobile Screen Glass Thumb-Tap Foley ({duration_sec:.1f}s)...")
     sample_rate = 44100
     total_samples = int(sample_rate * duration_sec)
     samples = [0.0] * total_samples
@@ -96,7 +93,7 @@ def synthesize_mobile_screen_tap_foley(duration_sec: float, output_wav: str):
     while current_pos < total_samples - 2500:
         tap_duration = 650
         center_freq = 195 if (tap_idx % 2 == 0) else 240
-        amplitude = 0.028
+        amplitude = 0.026
 
         for i in range(tap_duration):
             if current_pos + i < total_samples:
@@ -123,13 +120,13 @@ def mix_with_mobile_earphone_eq(voice_mp3: str, foley_wav: str, output_final: st
     cmd = (
         f'ffmpeg -y -i "{voice_mp3}" -i "{foley_wav}" '
         f'-filter_complex "[0:a]equalizer=f=150:t=q:w=1.2:g=2.5,equalizer=f=3500:t=q:w=1.0:g=1.5,volume=1.0[v];'
-        f'[1:a]volume=0.45[t];[v][t]amix=inputs=2:duration=first[out]" '
+        f'[1:a]volume=0.40[t];[v][t]amix=inputs=2:duration=first[out]" '
         f'-map "[out]" "{output_final}" -loglevel error'
     )
     res = os.system(cmd)
     if res != 0 or not os.path.exists(output_final):
         os.system(f'ffmpeg -y -i "{voice_mp3}" "{output_final}" -loglevel error')
-    print(f"[+] Final Master Audio Track Ready: {output_final}")
+    print(f"[+] Master Audio Track Ready: {output_final}")
 
 def get_audio_duration(file_path: str) -> float:
     try:
@@ -140,22 +137,21 @@ def get_audio_duration(file_path: str) -> float:
         ).decode().strip()
         return float(out)
     except Exception:
-        return 21.5
+        return 29.5
 
 def main():
     print("\n==========================================")
-    print("[*] PHASE 2: MOBILE GAMER HUMAN AUDIO ENGINE")
+    print("[*] AUDIO ENGINE 5.0: EXTENDED MOBILE HUMAN VOICE")
     print("==========================================")
 
     data = load_script_data()
     scenes = data.get("scenes", [])
-
     urdu_text = data.get("narration_urdu", data.get("narration", "")).strip()
-    en_text = data.get("narration_en", "Is DEVIL using secret config or pure reflexes?").strip()
+    en_text = data.get("narration_en", "Is this trick pure reflexes or secret config?").strip()
 
     loop = asyncio.get_event_loop()
     loop.run_until_complete(
-        synthesize_voiceover(urdu_text, URDU_VOICE, OUTPUT_URDU_MP3, rate="+15%", pitch="+2Hz")
+        synthesize_voiceover(urdu_text, URDU_VOICE, OUTPUT_URDU_MP3, rate="+14%", pitch="+2Hz")
     )
     loop.run_until_complete(
         synthesize_voiceover(en_text, ENGLISH_VOICE, OUTPUT_EN_MP3, rate="+12%", pitch="+1Hz")
@@ -168,7 +164,7 @@ def main():
     synthesize_mobile_screen_tap_foley(dur, OUTPUT_THUMB_FOLEY)
     mix_with_mobile_earphone_eq(OUTPUT_URDU_MP3, OUTPUT_THUMB_FOLEY, OUTPUT_FINAL_WAV)
 
-    print("\n[+] PHASE 2 COMPLETE: TRUE MOBILE HUMAN AUDIO ACTIVE\n")
+    print("\n[+] AUDIO ENGINE 5.0 COMPLETE: Perfect Audio-Duration Sync!\n")
 
 if __name__ == "__main__":
     main()
