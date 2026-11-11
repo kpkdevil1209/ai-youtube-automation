@@ -12,24 +12,25 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Install System Dependencies (FFmpeg & OpenCV Libs)
+      - name: Install System Dependencies (FFmpeg & Tools)
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg libsm6 libxext6
+          sudo apt-get install -y ffmpeg
 
       - name: Install Python Libraries
         run: |
           pip install --upgrade pip
           pip install setuptools wheel six
           pip install google-api-python-client google-auth-oauthlib google-auth-httplib2
-          pip install edge-tts
-          pip install opencv-python-headless pillow numpy yt-dlp
+          pip install edge-tts kaggle yt-dlp
 
       - name: Install & Start Local Ollama Runner
         run: |
@@ -44,11 +45,11 @@ jobs:
         run: |
           python empire_safety_shield.py
 
-      - name: Step 1 - Plan Daily Tasks (Randomized Duration & Cadence)
+      - name: Step 1 - Plan Daily Tasks (28s-34s Duration & Pillars)
         run: |
           python daily_task_planner.py
 
-      - name: Step 2 - Generate 65-Strategy Hyper-Retention Script
+      - name: Step 2 - Generate 65-Strategy Script & Harvest Gameplay
         run: |
           python generate_script.py
 
@@ -56,17 +57,60 @@ jobs:
         run: |
           python generate_audio.py
 
-      - name: Step 4 - Transform Free Fire Gameplay (Inpainting & DEVIL-999 Badge)
+      - name: Step 4 - Commit & Push Assets for Kaggle GPU
         run: |
-          python transformative_clipper.py
+          git config --global user.name "DEVIL Pipeline Bot"
+          git config --global user.email "bot@devilgaming.ai"
+          git add current_script.json final_audio.wav subtitles.srt subtitles_en.srt
+          git diff-index --quiet HEAD || git commit -m "Auto-Assets sync for Kaggle GPU [skip ci]"
+          git push origin main || echo "No changes to push or branch protected"
 
-      - name: Step 5 - Upload & Schedule to YouTube (18:00 PKT)
+      - name: Step 5 - Setup Kaggle Credentials
+        env:
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
+        run: |
+          mkdir -p ~/.kaggle
+          echo "{\"username\":\"$KAGGLE_USERNAME\",\"key\":\"$KAGGLE_KEY\"}" > ~/.kaggle/kaggle.json
+          chmod 600 ~/.kaggle/kaggle.json
+
+      - name: Step 6 - Trigger Kaggle GPU Video Render
+        run: |
+          echo "[*] Pushing code to Kaggle GPU Dual T4..."
+          kaggle kernels push -p ./kaggle_render/
+
+          echo "[*] Waiting for Kaggle GPU to render 60FPS Video (Timeout 10 mins)..."
+          for i in {1..20}; do
+            STATUS=$(kaggle kernels status kpkdevil/devil-video-render-engine | grep -o 'status ".*"' | cut -d'"' -f2)
+            echo " -> Kaggle Kernel Status: $STATUS ($i/20)"
+            if [ "$STATUS" == "complete" ]; then
+              echo "[+] Kaggle Render Finished Successfully!"
+              break
+            elif [ "$STATUS" == "error" ]; then
+              echo "[!] Kaggle GPU reported error!"
+              kaggle kernels output kpkdevil/devil-video-render-engine
+              exit 1
+            fi
+            sleep 30
+          done
+
+      - name: Step 7 - Download Rendered Video from Kaggle
+        run: |
+          echo "[*] Downloading final_output.mp4 from Kaggle GPU..."
+          kaggle kernels output kpkdevil/devil-video-render-engine -p ./
+          if [ ! -f "final_output.mp4" ]; then
+            echo "[!] final_output.mp4 not found from Kaggle. Using local fallback clipper..."
+            python transformative_clipper.py
+          fi
+          ls -lh final_output.mp4
+
+      - name: Step 8 - Upload & Schedule to YouTube (18:00 PKT)
         env:
           YOUTUBE_TOKEN_PICKLE: ${{ secrets.YOUTUBE_TOKEN_PICKLE }}
         run: |
           python upload_video.py
 
-      - name: Step 6 - Launch Live Comment Auto-Reply & Heart Bot
+      - name: Step 9 - Launch Live Comment Auto-Reply & Heart Bot
         env:
           YOUTUBE_TOKEN_PICKLE: ${{ secrets.YOUTUBE_TOKEN_PICKLE }}
         run: |
