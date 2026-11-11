@@ -6,6 +6,9 @@ on:
     - cron: '0 21 * * *'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
@@ -23,7 +26,7 @@ jobs:
       - name: Install System Dependencies (FFmpeg & Tools)
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg
+          sudo apt-get install -y ffmpeg libsm6 libxext6
 
       - name: Install Python Libraries
         run: |
@@ -45,11 +48,11 @@ jobs:
         run: |
           python empire_safety_shield.py
 
-      - name: Step 1 - Plan Daily Tasks (28s-34s Duration & Pillars)
+      - name: Step 1 - Plan Daily Tasks (Extended 28s-34s Duration)
         run: |
           python daily_task_planner.py
 
-      - name: Step 2 - Generate 65-Strategy Script & Harvest Gameplay
+      - name: Step 2 - Generate Script & Download 60FPS Gameplay on GitHub
         run: |
           python generate_script.py
 
@@ -57,13 +60,16 @@ jobs:
         run: |
           python generate_audio.py
 
-      - name: Step 4 - Commit & Push Assets for Kaggle GPU
+      - name: Step 4 - Commit & Push Gameplay & Audio for Kaggle GPU
         run: |
           git config --global user.name "DEVIL Pipeline Bot"
           git config --global user.email "bot@devilgaming.ai"
-          git add current_script.json final_audio.wav subtitles.srt subtitles_en.srt
-          git diff-index --quiet HEAD || git commit -m "Auto-Assets sync for Kaggle GPU [skip ci]"
-          git push origin main || echo "No changes to push or branch protected"
+          mkdir -p kaggle_render/gameplay_vault
+          cp -r gameplay_vault/* kaggle_render/gameplay_vault/ 2>/dev/null || true
+          cp final_audio.wav current_script.json kaggle_render/ 2>/dev/null || true
+          git add kaggle_render/ current_script.json final_audio.wav subtitles.srt subtitles_en.srt
+          git diff-index --quiet HEAD || git commit -m "Pass gameplay to Kaggle [skip ci]"
+          git push origin main || echo "Git push skipped"
 
       - name: Step 5 - Setup Kaggle Credentials
         env:
@@ -74,49 +80,35 @@ jobs:
           echo "{\"username\":\"$KAGGLE_USERNAME\",\"key\":\"$KAGGLE_KEY\"}" > ~/.kaggle/kaggle.json
           chmod 600 ~/.kaggle/kaggle.json
 
-      - name: Step 6 - Trigger Kaggle GPU & Smart Instant Download
+      - name: Step 6 - Kaggle GPU Video Render (Zero Fallback)
         run: |
-          echo "[*] Pushing code to Kaggle GPU Dual T4..."
+          echo "[*] Pushing kernel to Kaggle GPU Dual T4..."
           kaggle kernels push -p ./kaggle_render/
 
-          echo "[*] Monitoring Kaggle GPU with Smart Instant Polling (Checks every 10s)..."
-          RENDER_SUCCESS=false
-
-          for i in {1..40}; do
+          echo "[*] Monitoring Kaggle Render until 100% Complete..."
+          for i in {1..45}; do
             RAW_STATUS=$(kaggle kernels status kpkdevil/devil-video-render-engine 2>&1)
             STATUS=$(echo "$RAW_STATUS" | grep -o 'status ".*"' | cut -d'"' -f2)
             echo " -> Kaggle Kernel Status: [$STATUS] (Check #$i)"
 
             if [ "$STATUS" == "complete" ]; then
-              echo "[+] KAGGLE CONFIRMED: Video Render Finished! Immediately grabbing output..."
+              echo "[+] Kaggle Render Finished! Downloading final_output.mp4..."
               kaggle kernels output kpkdevil/devil-video-render-engine -p ./
-              
               if [ -f "final_output.mp4" ]; then
-                echo "[+] SUCCESS: final_output.mp4 downloaded instantly from Kaggle!"
-                RENDER_SUCCESS=true
+                echo "[+] SUCCESS: final_output.mp4 received from Kaggle!"
                 break
-              else
-                echo "[!] Complete signal received but file still downloading, retrying in 5s..."
-                sleep 5
-                kaggle kernels output kpkdevil/devil-video-render-engine -p ./
-                if [ -f "final_output.mp4" ]; then
-                  RENDER_SUCCESS=true
-                  break
-                fi
               fi
             elif [ "$STATUS" == "error" ]; then
-              echo "[!] Kaggle GPU reported error!"
+              echo "[!] Kaggle error log:"
               kaggle kernels output kpkdevil/devil-video-render-engine
-              break
+              exit 1
             fi
-
-            # Check every 10 seconds (ultra-responsive)
             sleep 10
           done
 
-          if [ "$RENDER_SUCCESS" != "true" ]; then
-            echo "[!] Kaggle GPU did not produce final_output.mp4 in time. Activating local 60FPS fallback engine..."
-            python transformative_clipper.py
+          if [ ! -f "final_output.mp4" ]; then
+            echo "[!] ERROR: final_output.mp4 was not produced by Kaggle!"
+            exit 1
           fi
 
           ls -lh final_output.mp4
