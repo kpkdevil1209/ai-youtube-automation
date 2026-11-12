@@ -1,5 +1,5 @@
 {
-  "id": "kpkdevil/devil-video-render-engine",
+  "id": "kpkdevil1209/devil-video-render-engine",
   "title": "devil-video-render-engine",
   "code_file": "render_video.py",
   "language": "python",
@@ -10,6 +10,5 @@
   "enable_internet": "true",
   "dataset_sources": [],
   "competition_sources": [],
-  "kernel_sources": [],
-  "model_sources": []
+  "kernel_sources": []
 }
