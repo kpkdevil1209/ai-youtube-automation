@@ -14,39 +14,84 @@ def parse_json(txt):
     except Exception:
         return json.loads(t[t.find("{"):t.rfind("}") + 1])
 
+def call_cloud_endpoint(url, model, token, prompt, max_tokens):
+    hdr = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "X-GitHub-Api-Version": "2022-11-28"
+    }
+    for use_rf in [True, False]:
+        body = {
+            "model": model,
+            "messages": [{"role": "system", "content": "Free Fire YouTube strategist. Output pure JSON only."}, {"role": "user", "content": prompt}],
+            "temperature": 0.85,
+            "max_tokens": max_tokens
+        }
+        if use_rf:
+            body["response_format"] = {"type": "json_object"}
+        try:
+            r = requests.post(url, headers=hdr, json=body, timeout=25)
+            if r.status_code == 200 and r.text.strip().startswith("{"):
+                msg = r.json().get("choices", [{}])[0].get("message", {}).get("content", "")
+                if msg and "{" in msg:
+                    return parse_json(msg)
+            print(f"[!] Endpoint {url.split('/')[2]} ({model}) status={r.status_code} body={r.text[:120]}")
+        except Exception as e:
+            print(f"[!] Cloud AI error ({model}): {e}")
+    return None
+
+def ensure_ollama():
+    base = os.environ.get("OLLAMA_URL", "http://localhost:11434").split("/api/")[0].rstrip("/")
+    def check_tags():
+        r = requests.get(f"{base}/api/tags", timeout=3)
+        return [m["name"] for m in r.json().get("models", []) if m.get("name")]
+
+    try:
+        return base, check_tags()
+    except Exception:
+        pass
+
+    if not shutil.which("ollama"):
+        print("[*] Installing Ollama on-demand for Real AI fallback-free execution...")
+        subprocess.run("curl -fsSL https://ollama.com/install.sh | sh", shell=True, check=True)
+    print("[*] Starting Ollama daemon...")
+    subprocess.Popen(["ollama", "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    for _ in range(15):
+        time.sleep(1.5)
+        try:
+            return base, check_tags()
+        except Exception:
+            continue
+    raise RuntimeError("FATAL: Ollama daemon failed to start.")
+
 def call_ai(prompt, max_tokens=650):
     token = os.environ.get("GITHUB_TOKEN", "").strip()
     if token:
-        try:
-            print("[*] Calling GPT-4o-mini (GitHub Models AI)...")
-            r = requests.post(
-                "https://models.github.ai/inference/chat/completions",
-                headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-                json={
-                    "model": "openai/gpt-4o-mini",
-                    "messages": [{"role": "system", "content": "Free Fire YouTube strategist. Reply valid JSON only."}, {"role": "user", "content": prompt}],
-                    "temperature": 0.85, "max_tokens": max_tokens, "response_format": {"type": "json_object"}
-                }, timeout=25
-            )
-            if r.status_code == 200:
-                return parse_json(r.json()["choices"][0]["message"]["content"])
-            print(f"[!] GitHub AI notice ({r.status_code}): {r.text[:120]}")
-        except Exception as e:
-            print(f"[!] GitHub AI error: {e}")
+        for url, mod in [
+            ("https://models.github.ai/inference/chat/completions", "openai/gpt-4o-mini"),
+            ("https://models.inference.ai.azure.com/chat/completions", "gpt-4o-mini")
+        ]:
+            print(f"[*] Calling GitHub AI ({mod})...")
+            res = call_cloud_endpoint(url, mod, token, prompt, max_tokens)
+            if res is not None:
+                return res
 
-    base = os.environ.get("OLLAMA_URL", "http://localhost:11434").split("/api/")[0].rstrip("/")
-    try:
-        tags = requests.get(f"{base}/api/tags", timeout=4).json()
-        models = [m["name"] for m in tags.get("models", []) if m.get("name")]
-        model = models[0] if models else "llama3.2:1b"
-        if not models and shutil.which("ollama"):
-            subprocess.run(["ollama", "pull", model], check=True)
-        r = requests.post(f"{base}/api/generate", json={"model": model, "prompt": prompt, "format": "json", "stream": False, "options": {"num_predict": max_tokens, "num_thread": 2}}, timeout=90)
-        if r.status_code == 200:
-            return parse_json(r.json().get("response", ""))
-    except Exception as e:
-        print(f"[!] Ollama notice: {e}")
-    raise RuntimeError("FATAL: Both GitHub GPT-4o-mini & Ollama failed. Ensure 'models: read' is in workflow permissions.")
+    base, models = ensure_ollama()
+    model = models[0] if models else "llama3.2:1b"
+    if not models:
+        print(f"[*] Pulling Ollama model '{model}'...")
+        subprocess.run(["ollama", "pull", model], check=True)
+    for att in range(1, 3):
+        try:
+            print(f"[*] Calling Ollama ({model}) [Attempt {att}/2]...")
+            r = requests.post(f"{base}/api/generate", json={"model": model, "prompt": prompt, "format": "json", "stream": False, "options": {"num_predict": max_tokens, "num_thread": 2}}, timeout=95)
+            if r.status_code == 200:
+                return parse_json(r.json().get("response", ""))
+            print(f"[!] Ollama HTTP {r.status_code}: {r.text[:120]}")
+        except Exception as e:
+            print(f"[!] Ollama attempt {att} error: {e}")
+    raise RuntimeError("FATAL: All AI engines failed. Zero fallback policy enforced!")
 
 def get_dur(path):
     if shutil.which("ffprobe"):
@@ -82,7 +127,7 @@ def fetch_stream(url, hdr=None):
     return False
 
 def dl_yt(q, used):
-    print(f"[*] [Tier 1] yt-dlp searching (no-cookie clients): '{q}'...")
+    print(f"[*] [Tier 1] yt-dlp searching: '{q}'...")
     js_rt = "deno" if shutil.which("deno") else ("node" if shutil.which("node") else None)
     try:
         with yt_dlp.YoutubeDL({"quiet": True, "extract_flat": True, "default_search": "ytsearch5", "noplaylist": True}) as ydl:
