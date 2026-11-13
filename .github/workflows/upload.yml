@@ -85,6 +85,7 @@ jobs:
 
       - name: Step 6 - Kaggle Render (Fast CPU Mode, Zero Fallback)
         run: |
+          pip install -q six python-slugify python-dateutil
           echo "[*] Pushing kernel to Kaggle..."
           kaggle kernels push -p kaggle_render
           KERNEL_ID=$(python -c "import json; print(json.load(open('kaggle_render/kernel-metadata.json'))['id'])")
@@ -97,6 +98,7 @@ jobs:
             fi
             if echo "$STATUS" | grep -qi "error\|cancel"; then
               echo "[!] Kaggle Kernel Failed!"
+              kaggle kernels output "$KERNEL_ID" -p . || true
               exit 1
             fi
             sleep 8
