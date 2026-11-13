@@ -1,102 +1,80 @@
-"""
-daily_task_planner.py (Version 5.0)
-Autonomous Daily Task & Extended Duration Planner.
-- Shorts Duration: Randomly 26.0s - 34.0s (Sweet Spot: ~29s).
-- Long Video Duration: Randomly 14.0m - 16.5m (Every 3 Days).
-- Community Poll: Every 2 Days.
-"""
-
-import json
 import os
+import json
 import random
-from datetime import datetime, date
-from niche_brain import scout_live_viral_trend
+import datetime
+from niche_brain import scout_live_viral_trend, load_history, save_history_entry
 
-PROFILE_PATH = "channel_profile.json"
-OUTPUT_MANIFEST = "today_tasks.json"
-
-def calculate_days_difference(last_date_str: str) -> int:
-    if not last_date_str:
-        return 999
-    try:
-        last_date = datetime.strptime(last_date_str, "%Y-%m-%d").date()
-        return (date.today() - last_date).days
-    except Exception:
-        return 999
-
-def get_randomized_short_duration() -> float:
-    return round(random.uniform(26.0, 34.0), 1)
-
-def get_randomized_long_duration() -> float:
-    return round(random.uniform(14.0, 16.5), 2)
+def load_channel_profile():
+    print("[*] Reading channel_profile.json...")
+    default_profile = {
+        "channel_name": "DEVIL INSANITY",
+        "player_tag": "DEVIL-999",
+        "primary_game": "Free Fire",
+        "upload_time_pkt": "18:00",
+        "long_video_interval_days": 3
+    }
+    if os.path.exists("channel_profile.json"):
+        try:
+            with open("channel_profile.json", "r", encoding="utf-8") as f:
+                loaded = json.load(f)
+                default_profile.update(loaded)
+        except Exception as e:
+            print(f"[!] Profile read notice: {e}. Using defaults.")
+    return default_profile
 
 def plan_today_tasks():
-    print("[*] Reading channel_profile.json...")
-    profile = {}
-    if os.path.exists(PROFILE_PATH):
-        try:
-            with open(PROFILE_PATH, "r", encoding="utf-8") as f:
-                profile = json.load(f)
-        except Exception:
-            pass
+    profile = load_channel_profile()
+    history = load_history()
+    run_index = history.get("total_planned", 0) + 1
 
-    today_str = date.today().strftime("%Y-%m-%d")
-    history = profile.get("history", {})
-    schedule = profile.get("schedule", {})
+    # Shorts daily; Long Video (14m - 16.5m) every N days based on cadence
+    interval = int(profile.get("long_video_interval_days", 3))
+    is_long_day = (interval > 0 and run_index % interval == 0 and os.environ.get("FORCE_SHORT", "0") != "1")
 
-    days_since_long = calculate_days_difference(history.get("last_long_video_date"))
-    days_since_comm = calculate_days_difference(history.get("last_community_post_date"))
+    if is_long_day:
+        format_type = "long"
+        target_duration = round(random.uniform(840.0, 990.0), 1)  # 14m - 16.5m
+        scene_count = 7
+    else:
+        format_type = "short"
+        target_duration = round(random.uniform(26.5, 33.8), 1)   # Extended 26.5s - 33.8s viral Short
+        scene_count = 7
 
-    long_interval = schedule.get("long_video_interval_days", 3)
-    comm_interval = schedule.get("community_post_interval_days", 2)
+    print(f"[*] Scouting Live Pillar & Trends for {profile.get('channel_name', 'DEVIL INSANITY')} ({format_type.upper()})...")
+    trend = scout_live_viral_trend(format_type=format_type)
 
-    do_short = True
-    do_long = days_since_long >= long_interval
-    do_comm = days_since_comm >= comm_interval
-
-    trend = scout_live_viral_trend()
-    short_duration_sec = get_randomized_short_duration()
-    calculated_scenes_count = 7
-    long_duration_mins = get_randomized_long_duration() if do_long else 0
-
-    manifest = {
-        "date": today_str,
+    plan = {
+        "date": datetime.datetime.utcnow().strftime("%Y-%m-%d"),
         "channel_name": profile.get("channel_name", "DEVIL INSANITY"),
-        "in_game_tag": profile.get("content_strategy", {}).get("in_game_name_tag", "DEVIL-999"),
-        "tasks": {
-            "daily_short": {
-                "active": do_short,
-                "pillar": trend["pillar"],
-                "topic": trend["hook"],
-                "featured_weapon": trend["weapon"],
-                "headshot_dmg": trend["headshot_dmg"],
-                "target_duration_sec": short_duration_sec,
-                "calculated_scenes_count": calculated_scenes_count,
-                "pacing": "extended_sandwich_splicing",
-                "subtitles": ["ur", "en"]
-            },
-            "long_video": {
-                "active": do_long,
-                "days_since_last": days_since_long,
-                "interval_required": long_interval,
-                "target_duration_mins": long_duration_mins
-            },
-            "community_poll": {
-                "active": do_comm,
-                "days_since_last": days_since_comm,
-                "interval_required": comm_interval
-            }
-        }
+        "player_tag": profile.get("player_tag", "DEVIL-999"),
+        "format_type": format_type,
+        "type": format_type,
+        "target_duration": target_duration,
+        "scene_count": scene_count,
+        "pillar": trend.get("pillar", trend.get("pillar_name", "Weapon Mastery & Drag Physics")),
+        "pillar_id": trend.get("pillar_id", "weapon_drag_physics"),
+        "weapon": trend.get("weapon", "Desert Eagle"),
+        "damage": trend.get("damage", "495"),
+        "strategy": trend.get("strategy", trend.get("psychology_strategy", "01_Frame_Zero_Shock")),
+        "search_query": trend.get("search_query", ""),
+        "topic": trend.get("topic", ""),
+        "source": trend.get("source", "live_youtube_reddit_scout")
     }
 
-    print("\n==========================================")
-    print(f"[*] MASTER WORK PLAN 5.0: {today_str}")
-    print(f" -> Topic: {trend['hook']}")
-    print(f" -> Duration: {short_duration_sec}s (7 Multi-Stage Scenes)")
-    print("==========================================\n")
+    # Write both standard filenames so all downstream scripts read cleanly
+    for out_file in ["daily_plan.json", "task_plan.json"]:
+        with open(out_file, "w", encoding="utf-8") as f:
+            json.dump(plan, f, indent=2)
 
-    with open(OUTPUT_MANIFEST, "w", encoding="utf-8") as f:
-        json.dump(manifest, f, indent=2, ensure_ascii=False)
+    save_history_entry(pillar_id=plan["pillar_id"], increment_planned=True)
+
+    print("==================================================")
+    print(f"[+] DAILY TASK PLAN READY ({format_type.upper()})")
+    print(f" -> Pillar: {plan['pillar']} ({plan['weapon']})")
+    print(f" -> Strategy: {plan['strategy']}")
+    print(f" -> Duration: {target_duration}s ({scene_count} Multi-Stage Scenes)")
+    print("==================================================")
+    return plan
 
 if __name__ == "__main__":
     plan_today_tasks()
