@@ -1,6 +1,5 @@
 import os
 import json
-import time
 import random
 import requests
 
@@ -11,44 +10,75 @@ CONTENT_PILLARS = {
     "weapon_drag_physics": {
         "name": "Weapon Mastery & Drag Physics",
         "objective": "Decode headshot drag trajectories, recoil reset timings, and fire-button micro physics.",
-        "seed_keywords": ["free fire desert eagle one tap", "free fire m1887 headshot trick", "free fire woodpecker drag", "free fire mp40 recoil"],
+        "seed_keywords": [
+            "free fire desert eagle one tap",
+            "free fire m1887 headshot trick",
+            "free fire woodpecker drag",
+            "free fire mp40 recoil",
+            "free fire awm fast switch"
+        ],
         "weapons": ["Desert Eagle", "M1887", "Woodpecker", "MP40", "AWM", "AC80", "UMP", "M1014", "Groza", "SVD", "M500", "Trogon"]
     },
     "hacker_vs_skill_investigation": {
         "name": "Panel vs Pure Mobile Reflex Investigation",
-        "objective": "Forensically inspect impossible flicks, smoke shots, and high headshot rates to debate skill vs panel.",
-        "seed_keywords": ["free fire impossible headshot", "free fire panel or skill", "free fire fastest handcam", "free fire banned gameplay"],
+        "objective": "Inspect impossible flicks, smoke shots, and high headshot ratios to debate panel vs pure skill.",
+        "seed_keywords": [
+            "free fire impossible headshot",
+            "free fire panel or skill",
+            "free fire fastest handcam",
+            "free fire red numbers montage"
+        ],
         "weapons": ["Woodpecker", "M1887", "Desert Eagle", "SVD", "AC80", "AWM"]
     },
     "clutch_psychology": {
         "name": "1v4 Solo vs Squad Clutch IQ",
         "objective": "Break down angle isolation, gloo wall timing, and high-pressure survival under 15 HP.",
-        "seed_keywords": ["free fire 1v4 clutch", "free fire solo vs squad", "free fire cs ranked clutch", "free fire grandmaster custom"],
+        "seed_keywords": [
+            "free fire 1v4 clutch",
+            "free fire solo vs squad",
+            "free fire cs ranked clutch",
+            "free fire grandmaster custom room"
+        ],
         "weapons": ["M1887", "MP40", "UMP", "M1014", "Desert Eagle", "Trogon"]
     },
     "old_nostalgia_lore": {
         "name": "Old Free Fire Nostalgia & Meta Evolution",
         "objective": "Contrast classic 2018-2020 Free Fire eras, old map zones, and iconic metas with today.",
-        "seed_keywords": ["old free fire gameplay", "free fire peak nostalgia", "free fire season 1 montage", "free fire factory fight"],
+        "seed_keywords": [
+            "old free fire gameplay",
+            "free fire peak nostalgia",
+            "free fire season 1 montage",
+            "free fire factory fight"
+        ],
         "weapons": ["Old M4A1", "M1887", "MP40", "AK47", "Fist", "Scar"]
     },
     "device_sensitivity_meta": {
         "name": "DPI, Touch Sampling & Sensitivity Science",
-        "objective": "Analyze low-end vs 120Hz touch physics, crosshair placement height, and button scale secrets.",
-        "seed_keywords": ["free fire sensitivity headshot", "free fire dpi settings", "free fire 60fps handcam", "free fire red number settings"],
+        "objective": "Analyze low-end vs 120Hz touch physics, crosshair placement height, and fire button scale secrets.",
+        "seed_keywords": [
+            "free fire sensitivity headshot",
+            "free fire dpi settings",
+            "free fire 60fps handcam",
+            "free fire red number settings"
+        ],
         "weapons": ["Desert Eagle", "Woodpecker", "M1887", "UMP", "M500"]
     },
     "dark_mysteries_glitches": {
         "name": "Free Fire Dark Mysteries & Server Bugs",
         "objective": "Investigate eerie myths, broken custom rooms, banned accounts, and hidden server anomalies.",
-        "seed_keywords": ["free fire glitch gameplay", "free fire mystery moments", "free fire scary custom", "free fire rare clutch"],
+        "seed_keywords": [
+            "free fire glitch gameplay",
+            "free fire mystery moments",
+            "free fire rare clutch",
+            "free fire secret trick"
+        ],
         "weapons": ["AWM", "Crossbow", "Scythe", "Woodpecker", "M1887"]
     }
 }
 
-# 2. FACTUAL WEAPON DAMAGE & MECHANIC META (For Real Number Alignment)
+# 2. FACTUAL WEAPON DAMAGE & MECHANIC META
 WEAPON_META = {
-    "Desert Eagle": {"head_dmg": "495", "type": "One-Tap Pistol", "mechanic": "U-shape fast drag after foot-level aim"},
+    "Desert Eagle": {"head_dmg": "495", "type": "One-Tap Pistol", "mechanic": "U-shape fast drag after chest-level aim"},
     "M1887": {"head_dmg": "550", "type": "2-Shot Shotgun", "mechanic": "Jump-shot or crouch-release chest-up drag"},
     "Woodpecker": {"head_dmg": "372", "type": "Marksman Rifle", "mechanic": "Zero analog movement single-tap reset"},
     "MP40": {"head_dmg": "148", "type": "High-RPM SMG", "mechanic": "Rapid tight vertical flick to lock neck-to-head"},
@@ -68,7 +98,7 @@ WEAPON_META = {
     "Scythe": {"head_dmg": "280", "type": "Melee", "mechanic": "Sprint-jump swing momentum"}
 }
 
-# 3. 65 PSYCHOLOGICAL RETENTION STRATEGIES (Hook & Pacing Styles)
+# 3. 65 PSYCHOLOGICAL RETENTION STRATEGIES
 PSYCHOLOGY_STRATEGIES = [
     "01_Frame_Zero_Shock", "02_Curiosity_Gap_Question", "03_Panel_Accusation_Debate",
     "04_Forbidden_Pro_Secret", "05_99_Percent_Failure_Bias", "06_Micro_Countdown_Tension",
@@ -100,12 +130,18 @@ def load_history():
             with open(HISTORY_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
                 if isinstance(data, dict):
-                    return data
+                    return {
+                        "queries": list(data.get("queries", [])),
+                        "video_ids": list(data.get("video_ids", [])),
+                        "titles": list(data.get("titles", [])),
+                        "last_pillar": str(data.get("last_pillar", "")),
+                        "total_planned": int(data.get("total_planned", 0))
+                    }
         except Exception:
             pass
-    return {"queries": [], "video_ids": [], "titles": [], "last_pillar": ""}
+    return {"queries": [], "video_ids": [], "titles": [], "last_pillar": "", "total_planned": 0}
 
-def save_history_entry(query="", video_id="", title="", pillar_id=""):
+def save_history_entry(query="", video_id="", title="", pillar_id="", increment_planned=False):
     history = load_history()
     if query and query not in history["queries"]:
         history["queries"].append(query)
@@ -115,7 +151,9 @@ def save_history_entry(query="", video_id="", title="", pillar_id=""):
         history["titles"].append(title)
     if pillar_id:
         history["last_pillar"] = pillar_id
-    # Keep file compact (last 200 entries)
+    if increment_planned:
+        history["total_planned"] = history.get("total_planned", 0) + 1
+
     history["queries"] = history["queries"][-200:]
     history["video_ids"] = history["video_ids"][-200:]
     history["titles"] = history["titles"][-200:]
@@ -123,7 +161,7 @@ def save_history_entry(query="", video_id="", title="", pillar_id=""):
         json.dump(history, f, indent=2)
 
 def fetch_live_youtube_suggestions(seed_keyword):
-    """Fetches real-time trending searches directly from YouTube public autocomplete API."""
+    """Fetches real-time trending searches from YouTube public autocomplete API."""
     try:
         url = f"https://suggestqueries.google.com/complete/search?client=firefox&ds=yt&q={requests.utils.quote(seed_keyword)}"
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
@@ -131,21 +169,20 @@ def fetch_live_youtube_suggestions(seed_keyword):
         if res.status_code == 200:
             payload = res.json()
             if isinstance(payload, list) and len(payload) > 1 and isinstance(payload[1], list):
-                return [s for s in payload[1] if isinstance(s, str) and len(s) > 5]
+                return [s.strip() for s in payload[1] if isinstance(s, str) and len(s.strip()) > 5]
     except Exception:
         pass
     return []
 
 def fetch_live_reddit_signals():
-    """Fetches live community titles from r/freefire and r/freefireclips."""
+    """Fetches live community chatter from Free Fire subreddits."""
     signals = []
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) FreeFireTrendScout/2.0"}
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) FreeFireTrendScout/3.0"}
     for sub in ["freefire", "freefireclips"]:
         try:
-            res = requests.get(f"https://www.reddit.com/r/{sub}/hot.json?limit=15", headers=headers, timeout=8)
+            res = requests.get(f"https://www.reddit.com/r/{sub}/hot.json?limit=12", headers=headers, timeout=8)
             if res.status_code == 200:
-                children = res.json().get("data", {}).get("children", [])
-                for c in children:
+                for c in res.json().get("data", {}).get("children", []):
                     t = c.get("data", {}).get("title", "").strip()
                     if t:
                         signals.append(t[:90])
@@ -156,14 +193,13 @@ def fetch_live_reddit_signals():
 def scout_live_viral_trend(format_type="short", ollama_url="http://localhost:11434/api/generate"):
     """
     Real-Time Pillar & Trend Scout (Zero Hardcoded Topics):
-    Reads 6 Pillars + Live YouTube/Reddit signals + Used History,
-    then picks a fresh un-repeated Pillar Blueprint for AI scripting.
+    Returns ALL compatible keys expected across daily_task_planner.py and generate_script.py.
     """
     history = load_history()
     used_queries_lower = {q.lower() for q in history.get("queries", [])}
     last_pillar = history.get("last_pillar", "")
 
-    # Rotate pillar so consecutive videos never feel identical
+    # Rotate pillar on every run
     available_pillars = [k for k in CONTENT_PILLARS.keys() if k != last_pillar] or list(CONTENT_PILLARS.keys())
     pillar_id = random.choice(available_pillars)
     pillar = CONTENT_PILLARS[pillar_id]
@@ -172,49 +208,56 @@ def scout_live_viral_trend(format_type="short", ollama_url="http://localhost:114
     weapon_info = WEAPON_META.get(weapon, {"head_dmg": "550", "type": "Weapon", "mechanic": "clean headshot drag"})
     psychology = random.choice(PSYCHOLOGY_STRATEGIES)
 
-    # Pull LIVE trends from YouTube Suggest & Reddit
+    # Pull live signals from YouTube Suggest & Reddit
     seed = random.choice(pillar["seed_keywords"])
     live_yt = fetch_live_youtube_suggestions(seed)
     live_yt_weapon = fetch_live_youtube_suggestions(f"free fire {weapon.lower()} ")
     combined_live_yt = [q for q in (live_yt + live_yt_weapon) if q.lower() not in used_queries_lower]
     live_reddit = fetch_live_reddit_signals()
 
-    # Construct a fresh live search query from real-time signals (no static topic list)
     if combined_live_yt:
-        picked_trend = random.choice(combined_live_yt)
-        search_query = f"{picked_trend} 60fps" if "60fps" not in picked_trend.lower() else picked_trend
+        chosen_signal = random.choice(combined_live_yt)
+        search_query = f"{chosen_signal} 60fps" if "60fps" not in chosen_signal.lower() else chosen_signal
     else:
+        chosen_signal = f"{weapon} {pillar['name']}"
         search_query = f"{seed} {weapon} 60fps highlights"
 
-    # Build AI prompt context using the Pillar + Live Trend + Psychology
     prompt_context = (
         f"Channel: DEVIL INSANITY (Tag: DEVIL-999) | Format: {format_type.upper()}\n"
         f"Pillar: {pillar['name']} ({pillar['objective']})\n"
         f"Weapon: {weapon} ({weapon_info['type']}, Head Damage: {weapon_info['head_dmg']}, Mechanic: {weapon_info['mechanic']})\n"
         f"Psychological Retention Hook: {psychology}\n"
-        f"Live YouTube Trending Searches: {combined_live_yt[:5]}\n"
-        f"Live Reddit Community Chatter: {live_reddit[:3]}\n"
+        f"Live YouTube Trending Searches: {combined_live_yt[:6]}\n"
+        f"Live Reddit Chatter: {live_reddit[:3]}\n"
         f"Banned Already-Used Queries: {history.get('queries', [])[-15:]}"
     )
 
     return {
+        # Compatible keys for daily_task_planner.py & all modules
+        "pillar": pillar["name"],
         "pillar_id": pillar_id,
         "pillar_name": pillar["name"],
         "pillar_objective": pillar["objective"],
+        "topic": chosen_signal,
+        "title": f"{chosen_signal[:48]} #shorts #freefire",
+        "search_query": search_query,
+        "query": search_query,
         "format_type": format_type,
         "weapon": weapon,
         "damage": weapon_info["head_dmg"],
         "weapon_mechanic": weapon_info["mechanic"],
+        "strategy": psychology,
         "psychology_strategy": psychology,
-        "search_query": search_query,
+        "angle": pillar["objective"],
+        "hook": psychology,
+        "source": "live_youtube_reddit_scout",
         "live_youtube_trends": combined_live_yt[:6],
         "live_reddit_trends": live_reddit[:4],
         "used_queries": history.get("queries", [])[-15:],
         "used_video_ids": history.get("video_ids", []),
         "used_titles": history.get("titles", [])[-15:],
         "prompt_context": prompt_context,
-        "player_tag": "DEVIL-999",
-        "title": f"{weapon} {pillar['name']} #shorts #freefire"
+        "player_tag": "DEVIL-999"
     }
 
 class NicheBrain:
@@ -239,5 +282,4 @@ def build_dynamic_prompt(blueprint):
     return blueprint.get("prompt_context", "")
 
 if __name__ == "__main__":
-    result = scout_live_viral_trend()
-    print(json.dumps(result, indent=2))
+    print(json.dumps(scout_live_viral_trend(), indent=2))
