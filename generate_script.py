@@ -4,94 +4,92 @@ from niche_brain import scout_live_viral_trend, save_history_entry, load_history
 PIPED = ["https://pipedapi.kavin.rocks", "https://pipedapi-libre.kavin.rocks", "https://pipedapi.leptons.xyz", "https://pipedapi.adminforge.de", "https://api.piped.private.coffee"]
 INVIDIOUS = ["https://inv.nadeko.net", "https://yewtu.be", "https://invidious.nerdvpn.de", "https://invidious.privacydev.net"]
 
-def parse_json(txt):
-    t = txt.strip()
-    if t.startswith("```"):
-        lines = t.splitlines()
-        t = "\n".join(lines[1:-1] if lines[-1].strip().startswith("```") else lines[1:]).strip()
-    try:
-        return json.loads(t)
-    except Exception:
-        return json.loads(t[t.find("{"):t.rfind("}") + 1])
+CONCEPT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "topic_angle": {"type": "string"},
+        "title": {"type": "string"},
+        "search_query": {"type": "string"},
+        "visual_focus": {"type": "string"}
+    },
+    "required": ["topic_angle", "title", "search_query", "visual_focus"]
+}
 
-def call_cloud_endpoint(url, model, token, prompt, max_tokens):
-    hdr = {
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-        "X-GitHub-Api-Version": "2022-11-28"
-    }
-    for use_rf in [True, False]:
-        body = {
-            "model": model,
-            "messages": [{"role": "system", "content": "Free Fire YouTube strategist. Output pure JSON only."}, {"role": "user", "content": prompt}],
-            "temperature": 0.85,
-            "max_tokens": max_tokens
+SCRIPT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "title": {"type": "string"},
+        "description": {"type": "string"},
+        "tags": {"type": "array", "items": {"type": "string"}},
+        "pinned_comment": {"type": "string"},
+        "scenes": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "time": {"type": "number"},
+                    "narration": {"type": "string"},
+                    "english_subtitle": {"type": "string"},
+                    "focus_cue": {"type": "string"}
+                },
+                "required": ["time", "narration", "english_subtitle", "focus_cue"]
+            }
         }
-        if use_rf:
-            body["response_format"] = {"type": "json_object"}
-        try:
-            r = requests.post(url, headers=hdr, json=body, timeout=25)
-            if r.status_code == 200 and r.text.strip().startswith("{"):
-                msg = r.json().get("choices", [{}])[0].get("message", {}).get("content", "")
-                if msg and "{" in msg:
-                    return parse_json(msg)
-            print(f"[!] Endpoint {url.split('/')[2]} ({model}) status={r.status_code} body={r.text[:120]}")
-        except Exception as e:
-            print(f"[!] Cloud AI error ({model}): {e}")
-    return None
+    },
+    "required": ["title", "description", "tags", "pinned_comment", "scenes"]
+}
 
 def ensure_ollama():
     base = os.environ.get("OLLAMA_URL", "http://localhost:11434").split("/api/")[0].rstrip("/")
-    def check_tags():
-        r = requests.get(f"{base}/api/tags", timeout=3)
-        return [m["name"] for m in r.json().get("models", []) if m.get("name")]
-
+    def get_models():
+        return [m["name"] for m in requests.get(f"{base}/api/tags", timeout=3).json().get("models", []) if m.get("name")]
     try:
-        return base, check_tags()
+        return base, get_models()
     except Exception:
         pass
-
     if not shutil.which("ollama"):
-        print("[*] Installing Ollama on-demand for Real AI fallback-free execution...")
+        print("[*] Installing Ollama...")
         subprocess.run("curl -fsSL https://ollama.com/install.sh | sh", shell=True, check=True)
-    print("[*] Starting Ollama daemon...")
     subprocess.Popen(["ollama", "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     for _ in range(15):
         time.sleep(1.5)
         try:
-            return base, check_tags()
+            return base, get_models()
         except Exception:
             continue
-    raise RuntimeError("FATAL: Ollama daemon failed to start.")
+    raise RuntimeError("FATAL: Ollama failed to start.")
 
-def call_ai(prompt, max_tokens=650):
-    token = os.environ.get("GITHUB_TOKEN", "").strip()
-    if token:
-        for url, mod in [
-            ("https://models.github.ai/inference/chat/completions", "openai/gpt-4o-mini"),
-            ("https://models.inference.ai.azure.com/chat/completions", "gpt-4o-mini")
-        ]:
-            print(f"[*] Calling GitHub AI ({mod})...")
-            res = call_cloud_endpoint(url, mod, token, prompt, max_tokens)
-            if res is not None:
-                return res
-
+def call_ollama_schema(prompt, schema, max_tokens=600):
     base, models = ensure_ollama()
     model = models[0] if models else "llama3.2:1b"
     if not models:
-        print(f"[*] Pulling Ollama model '{model}'...")
+        print(f"[*] Pulling '{model}'...")
         subprocess.run(["ollama", "pull", model], check=True)
-    for att in range(1, 3):
+    payload = {
+        "model": model,
+        "messages": [{"role": "system", "content": "Free Fire YouTube strategist. Output valid JSON strictly matching schema."}, {"role": "user", "content": prompt}],
+        "format": schema,
+        "stream": False,
+        "keep_alive": "10m",
+        "options": {"temperature": 0.5, "num_ctx": 1536, "num_predict": max_tokens, "num_thread": os.cpu_count() or 2}
+    }
+    for att in range(1, 4):
         try:
-            print(f"[*] Calling Ollama ({model}) [Attempt {att}/2]...")
-            r = requests.post(f"{base}/api/generate", json={"model": model, "prompt": prompt, "format": "json", "stream": False, "options": {"num_predict": max_tokens, "num_thread": 2}}, timeout=95)
-            if r.status_code == 200:
-                return parse_json(r.json().get("response", ""))
-            print(f"[!] Ollama HTTP {r.status_code}: {r.text[:120]}")
+            print(f"[*] Calling Ollama ({model}) [Attempt {att}/3]...")
+            r = requests.post(f"{base}/api/chat", json=payload, timeout=110)
+            if r.status_code != 200:
+                raise RuntimeError(f"HTTP {r.status_code}: {r.text[:120]}")
+            txt = r.json().get("message", {}).get("content", "").strip()
+            if not txt:
+                raise ValueError("Empty response content")
+            data = json.loads(txt)
+            if all(k in data and data[k] for k in schema["required"]):
+                return data
+            raise ValueError(f"Missing required keys in: {list(data.keys())}")
         except Exception as e:
-            print(f"[!] Ollama attempt {att} error: {e}")
-    raise RuntimeError("FATAL: All AI engines failed. Zero fallback policy enforced!")
+            print(f"[!] Ollama attempt {att} notice: {e}")
+            time.sleep(2)
+    raise RuntimeError("FATAL: AI structured output failed. Zero fallback policy enforced!")
 
 def get_dur(path):
     if shutil.which("ffprobe"):
@@ -144,12 +142,12 @@ def dl_yt(q, used):
             if valid_mp4("raw_gameplay.mp4"):
                 return vid
         except Exception as e:
-            print(f"[!] Tier 1 notice ({vid}): {str(e)[:90]}")
+            print(f"[!] Tier 1 notice ({vid}): {str(e)[:80]}")
         clean_tmp()
     return None
 
 def dl_piped(q, used):
-    print("[*] [Tier 2] Checking Piped API nodes...")
+    print("[*] [Tier 2] Checking Piped API...")
     for node in random.sample(PIPED, len(PIPED)):
         try:
             r = requests.get(f"{node}/search?q={requests.utils.quote(q)}&filter=videos", timeout=4)
@@ -174,7 +172,7 @@ def dl_piped(q, used):
     return None
 
 def dl_invid(q, used):
-    print("[*] [Tier 3] Checking Invidious API nodes...")
+    print("[*] [Tier 3] Checking Invidious API...")
     for node in random.sample(INVIDIOUS, len(INVIDIOUS)):
         try:
             r = requests.get(f"{node}/api/v1/search?q={requests.utils.quote(q)}&type=video", timeout=4)
@@ -240,9 +238,12 @@ def generate_script():
     bp["target_duration"] = float(plan.get("target_duration", random.uniform(28.0, 33.5)))
     used = set(load_history().get("video_ids", []))
 
-    concept = call_ai(f"DEVIL INSANITY (DEVIL-999) strategist. From this Pillar Blueprint invent ONE new concept & 5-7 word English Free Fire search query (not in banned list):\n{bp['prompt_context']}\nJSON keys: topic_angle, title (under 55 chars with #shorts #freefire), search_query, visual_focus", max_tokens=220)
+    concept = call_ollama_schema(
+        f"Channel DEVIL INSANITY (DEVIL-999). Invent ONE new Free Fire video concept & 5-7 English word search_query (never repeat banned queries):\n{bp['prompt_context']}",
+        CONCEPT_SCHEMA, max_tokens=220
+    )
     q = concept["search_query"]
-    print(f"[+] Topic: {concept['title']} | Query: '{q}'")
+    print(f"[+] AI Topic: {concept['title']} | Query: '{q}'")
 
     clean_tmp()
     vid = dl_yt(q, used) or dl_piped(q, used) or dl_invid(q, used) or dl_dailymotion(q, used) or dl_reddit(used)
@@ -254,17 +255,18 @@ def generate_script():
     t_dur = round(bp["target_duration"], 1)
     times = [round(i * (t_dur / 7.0), 1) for i in range(7)]
 
-    ai_s = call_ai(f"Write 7-scene Roman Urdu + English script for '{concept['title']}' | Pillar: {bp['pillar_name']} | Weapon: {bp['weapon']} (Dmg: {bp['damage']}) | Hook: {bp['psychology_strategy']} | Clip: {dur:.1f}s -> Target: {t_dur}s | Times: {times}. JSON keys: title, description, tags (list), pinned_comment, scenes (7 objs: time, narration [punchy Roman Urdu, no emojis], english_subtitle, focus_cue).", max_tokens=680)
-    scenes = [{"time": float(s.get("time", times[min(i, 6)])), "narration": str(s.get("narration") or s.get("text") or "").strip(), "text": str(s.get("narration") or s.get("text") or "").strip(), "english_subtitle": str(s.get("english_subtitle") or "").strip(), "focus_cue": str(s.get("focus_cue") or "crosshair_lock")} for i, s in enumerate(ai_s.get("scenes", []))]
-    if not scenes:
-        raise RuntimeError("FATAL: AI returned 0 scenes.")
+    ai_s = call_ollama_schema(
+        f"Write 7-scene Roman Urdu narration + English subtitles for '{concept['title']}' | Pillar: {bp['pillar_name']} | Weapon: {bp['weapon']} (Dmg: {bp['damage']}) | Hook: {bp['psychology_strategy']} | Clip: {dur:.1f}s -> Target: {t_dur}s | Exact 7 timestamps: {times}. Keep narration punchy mobile-gamer Roman Urdu without emojis.",
+        SCRIPT_SCHEMA, max_tokens=700
+    )
+    scenes = [{"time": float(s.get("time", times[min(i, 6)])), "narration": str(s.get("narration", "")).strip(), "text": str(s.get("narration", "")).strip(), "english_subtitle": str(s.get("english_subtitle", "")).strip(), "focus_cue": str(s.get("focus_cue") or "crosshair_lock")} for i, s in enumerate(ai_s["scenes"])]
 
     out = {"title": ai_s.get("title") or concept["title"], "topic": concept["topic_angle"], "description": ai_s.get("description", ""), "tags": ai_s.get("tags", ["freefire", "shorts", "gaming"]), "pinned_comment": ai_s.get("pinned_comment", ""), "pillar": bp["pillar"], "pillar_id": bp["pillar_id"], "pillar_name": bp["pillar_name"], "psychology_strategy": bp["psychology_strategy"], "search_query": q, "source_video_id": vid, "weapon": bp["weapon"], "damage": bp["damage"], "format_type": fmt, "target_duration": bp["target_duration"], "player_tag": "DEVIL-999", "script": " ".join(s["narration"] for s in scenes), "english_script": " ".join(s["english_subtitle"] for s in scenes), "scenes": scenes}
     json.dump(out, open("current_script.json", "w", encoding="utf-8"), indent=2, ensure_ascii=False)
     if os.path.isdir("kaggle_render"):
         shutil.copy2("current_script.json", "kaggle_render/current_script.json")
     save_history_entry(query=q, video_id=vid, title=out["title"], pillar_id=bp["pillar_id"])
-    print("[+] Done! Script & Real Video saved.")
+    print("[+] Done! Structured AI Script & Real Video saved.")
 
 if __name__ == "__main__":
     generate_script()
