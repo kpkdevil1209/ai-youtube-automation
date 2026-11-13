@@ -1,126 +1,111 @@
-name: Autonomous YouTube Empire Pipeline
+name: DEVIL INSANITY - Autonomous Free Fire Pipeline
 
 on:
   schedule:
-    # Daily at 21:00 UTC = 2:00 AM PKT
-    - cron: '0 21 * * *'
+    - cron: '0 12 * * *' # 17:00 PKT (18:00 PKT upload se 1 hour pehle ready)
   workflow_dispatch:
 
 permissions:
   contents: write
+  models: read
 
 jobs:
-  build-and-deploy:
+  run-pipeline:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Setup Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          cache: 'pip'
 
-      - name: Install System Dependencies (FFmpeg & Tools)
+      - name: Fast Syntax Check (1 Second Fail-Fast)
+        run: python -m py_compile *.py
+
+      - name: Install Dependencies & FFmpeg
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg libsm6 libxext6
+          sudo apt-get update -y
+          sudo apt-get install -y ffmpeg
+          pip install -U pip
+          pip install -U yt-dlp requests edge-tts google-api-python-client google-auth google-auth-oauthlib kaggle
 
-      - name: Install Python Libraries
-        run: |
-          pip install --upgrade pip
-          pip install setuptools wheel six
-          pip install google-api-python-client google-auth-oauthlib google-auth-httplib2
-          pip install edge-tts kaggle yt-dlp
-
-      - name: Install & Start Local Ollama Runner
-        run: |
-          curl -fsSL https://ollama.com/install.sh | sh
-          ollama serve &
-          sleep 5
-          ollama pull llama3.2:3b
-
-      - name: Step 0 - Pre-Flight Security & Quota Shield
+      - name: Step 0 - Empire Safety Shield Check
         env:
           YOUTUBE_TOKEN_PICKLE: ${{ secrets.YOUTUBE_TOKEN_PICKLE }}
         run: |
-          python empire_safety_shield.py
+          if [ -f empire_safety_shield.py ]; then python empire_safety_shield.py; fi
 
-      - name: Step 1 - Plan Daily Tasks (Extended 28s-34s Duration)
-        run: |
-          python daily_task_planner.py
+      - name: Step 1 - Daily Task Planner (Pillars & Schedule)
+        run: python daily_task_planner.py
 
-      - name: Step 2 - Generate Script & Download 60FPS Gameplay on GitHub
-        run: |
-          python generate_script.py
+      - name: Step 2 - AI Script (GPT-4o-mini) & 60FPS Real Gameplay Harvester
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python generate_script.py
 
       - name: Step 3 - Generate Mobile Human Audio & Tempered Glass Taps
-        run: |
-          python generate_audio.py
+        run: python generate_audio.py
 
-      - name: Step 4 - Commit & Push Gameplay & Audio for Kaggle GPU
+      - name: Step 4 - Commit & Push Gameplay & Audio for Kaggle
         run: |
+          mkdir -p kaggle_render
+          cp -f raw_gameplay.mp4 final_audio.wav current_script.json kaggle_render/ 2>/dev/null || true
+          cp -f subtitles.srt subtitles_en.srt kaggle_render/ 2>/dev/null || true
           git config --global user.name "DEVIL Pipeline Bot"
-          git config --global user.email "bot@devilgaming.ai"
-          mkdir -p kaggle_render/gameplay_vault
-          cp -r gameplay_vault/* kaggle_render/gameplay_vault/ 2>/dev/null || true
-          cp final_audio.wav current_script.json kaggle_render/ 2>/dev/null || true
-          git add kaggle_render/ current_script.json final_audio.wav subtitles.srt subtitles_en.srt
-          git diff-index --quiet HEAD || git commit -m "Pass gameplay to Kaggle [skip ci]"
-          git push origin main || echo "Git push skipped"
+          git config --global user.email "bot@devil-insanity.local"
+          git add -A
+          git commit -m "Pass gameplay & assets to Kaggle [skip ci]" || echo "Nothing new to commit"
+          git push origin main
 
       - name: Step 5 - Setup Kaggle Credentials
         env:
           KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
           KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
+          KAGGLE_JSON: ${{ secrets.KAGGLE_JSON }}
         run: |
           mkdir -p ~/.kaggle
-          echo "{\"username\":\"$KAGGLE_USERNAME\",\"key\":\"$KAGGLE_KEY\"}" > ~/.kaggle/kaggle.json
+          if [ -n "$KAGGLE_JSON" ]; then
+            echo "$KAGGLE_JSON" > ~/.kaggle/kaggle.json
+          else
+            echo "{\"username\":\"$KAGGLE_USERNAME\",\"key\":\"$KAGGLE_KEY\"}" > ~/.kaggle/kaggle.json
+          fi
           chmod 600 ~/.kaggle/kaggle.json
 
-      - name: Step 6 - Kaggle GPU Video Render (Zero Fallback)
+      - name: Step 6 - Kaggle Render (Fast CPU Mode, Zero Fallback)
         run: |
-          echo "[*] Pushing kernel to Kaggle GPU Dual T4..."
-          kaggle kernels push -p ./kaggle_render/
-
-          echo "[*] Monitoring Kaggle Render until 100% Complete..."
-          for i in {1..45}; do
-            RAW_STATUS=$(kaggle kernels status kpkdevil/devil-video-render-engine 2>&1)
-            STATUS=$(echo "$RAW_STATUS" | grep -o 'status ".*"' | cut -d'"' -f2)
-            echo " -> Kaggle Kernel Status: [$STATUS] (Check #$i)"
-
-            if [ "$STATUS" == "complete" ]; then
-              echo "[+] Kaggle Render Finished! Downloading final_output.mp4..."
-              kaggle kernels output kpkdevil/devil-video-render-engine -p ./
-              if [ -f "final_output.mp4" ]; then
-                echo "[+] SUCCESS: final_output.mp4 received from Kaggle!"
-                break
-              fi
-            elif [ "$STATUS" == "error" ]; then
-              echo "[!] Kaggle error log:"
-              kaggle kernels output kpkdevil/devil-video-render-engine
+          echo "[*] Pushing kernel to Kaggle..."
+          kaggle kernels push -p kaggle_render
+          KERNEL_ID=$(python -c "import json; print(json.load(open('kaggle_render/kernel-metadata.json'))['id'])")
+          for i in $(seq 1 70); do
+            STATUS=$(kaggle kernels status "$KERNEL_ID")
+            echo " -> Check #$i: $STATUS"
+            if echo "$STATUS" | grep -qi "complete"; then
+              echo "[+] Kaggle Render Complete!"
+              break
+            fi
+            if echo "$STATUS" | grep -qi "error\|cancel"; then
+              echo "[!] Kaggle Kernel Failed!"
               exit 1
             fi
-            sleep 10
+            sleep 8
           done
-
-          if [ ! -f "final_output.mp4" ]; then
-            echo "[!] ERROR: final_output.mp4 was not produced by Kaggle!"
+          kaggle kernels output "$KERNEL_ID" -p .
+          if [ ! -f final_output.mp4 ]; then
+            echo "FATAL: final_output.mp4 missing from Kaggle output!"
             exit 1
           fi
-
-          ls -lh final_output.mp4
 
       - name: Step 7 - Upload & Schedule to YouTube (18:00 PKT)
         env:
           YOUTUBE_TOKEN_PICKLE: ${{ secrets.YOUTUBE_TOKEN_PICKLE }}
-        run: |
-          python upload_video.py
+        run: python upload_video.py
 
       - name: Step 8 - Launch Live Comment Auto-Reply & Heart Bot
         env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           YOUTUBE_TOKEN_PICKLE: ${{ secrets.YOUTUBE_TOKEN_PICKLE }}
-        run: |
-          python comment_reply_bot.py
+        run: python comment_reply_bot.py
