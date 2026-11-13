@@ -53,7 +53,16 @@ jobs:
         run: python daily_task_planner.py
 
       - name: Step 2 - AI Script (Ollama Schema) & 60FPS Real Gameplay Harvester
-        run: python generate_script.py
+        run: |
+          pip install -q bgutil-ytdlp-pot-provider
+          docker run --name bgutil-provider -d --init -p 127.0.0.1:4416:4416 brainicism/bgutil-ytdlp-pot-provider || true
+          WGCF_URL=$(curl -sSL https://api.github.com/repos/ViRb3/wgcf/releases/latest | python -c "import sys,json; print([a['browser_download_url'] for a in json.load(sys.stdin)['assets'] if 'linux_amd64' in a['name']][0])")
+          WIRE_URL=$(curl -sSL https://api.github.com/repos/windtf/wireproxy/releases/latest | python -c "import sys,json; print([a['browser_download_url'] for a in json.load(sys.stdin)['assets'] if 'linux_amd64.tar.gz' in a['name']][0])")
+          curl -fSL "$WGCF_URL" -o /tmp/wgcf && chmod +x /tmp/wgcf
+          curl -fSL "$WIRE_URL" -o /tmp/wp.tar.gz && tar -xzf /tmp/wp.tar.gz -C /tmp && chmod +x /tmp/wireproxy
+          (/tmp/wgcf register --accepted-tos && /tmp/wgcf generate && printf "WGConfig = ./wgcf-profile.conf\n[Socks5]\nBindAddress = 127.0.0.1:1080\n" > /tmp/wireproxy.conf && /tmp/wireproxy -c /tmp/wireproxy.conf >/dev/null 2>&1 & sleep 3) || true
+          python generate_script.py
+          rm -f wgcf-account.toml wgcf-profile.conf 2>/dev/null || true
 
       - name: Step 3 - Generate Mobile Human Audio & Tempered Glass Taps
         run: python generate_audio.py
