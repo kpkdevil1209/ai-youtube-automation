@@ -2,12 +2,11 @@ name: DEVIL INSANITY - Autonomous Free Fire Pipeline
 
 on:
   schedule:
-    - cron: '0 12 * * *' # 17:00 PKT (18:00 PKT upload se 1 hour pehle ready)
+    - cron: '0 12 * * *' # 17:00 PKT (18:00 PKT scheduled upload se pehle ready)
   workflow_dispatch:
 
 permissions:
   contents: write
-  models: read
 
 jobs:
   run-pipeline:
@@ -26,25 +25,34 @@ jobs:
       - name: Fast Syntax Check (1 Second Fail-Fast)
         run: python -m py_compile *.py
 
-      - name: Install Dependencies & FFmpeg
+      - name: Cache Ollama Models (5s Instant Restore)
+        uses: actions/cache@v4
+        with:
+          path: ~/.ollama
+          key: ${{ runner.os }}-ollama-llama3.2-1b
+
+      - name: Install Dependencies, FFmpeg & Ollama
         run: |
           sudo apt-get update -y
           sudo apt-get install -y ffmpeg
           pip install -U pip
           pip install -U yt-dlp requests edge-tts google-api-python-client google-auth google-auth-oauthlib kaggle
+          if ! command -v ollama >/dev/null 2>&1; then
+            curl -fsSL https://ollama.com/install.sh | sh
+          fi
 
       - name: Step 0 - Empire Safety Shield Check
         env:
           YOUTUBE_TOKEN_PICKLE: ${{ secrets.YOUTUBE_TOKEN_PICKLE }}
         run: |
-          if [ -f empire_safety_shield.py ]; then python empire_safety_shield.py; fi
+          if [ -f empire_safety_shield.py ]; then
+            python empire_safety_shield.py
+          fi
 
       - name: Step 1 - Daily Task Planner (Pillars & Schedule)
         run: python daily_task_planner.py
 
-      - name: Step 2 - AI Script (GPT-4o-mini) & 60FPS Real Gameplay Harvester
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Step 2 - AI Script (Ollama Schema) & 60FPS Real Gameplay Harvester
         run: python generate_script.py
 
       - name: Step 3 - Generate Mobile Human Audio & Tempered Glass Taps
@@ -106,6 +114,8 @@ jobs:
 
       - name: Step 8 - Launch Live Comment Auto-Reply & Heart Bot
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           YOUTUBE_TOKEN_PICKLE: ${{ secrets.YOUTUBE_TOKEN_PICKLE }}
-        run: python comment_reply_bot.py
+        run: |
+          nohup ollama serve >/dev/null 2>&1 &
+          sleep 3
+          python comment_reply_bot.py
