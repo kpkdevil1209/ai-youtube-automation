@@ -2,13 +2,12 @@ import os
 import sys
 import json
 import time
+import shutil
 import random
-import requests
 import subprocess
+import requests
 import yt_dlp
-from niche_brain import NicheBrain
-
-brain = NicheBrain()
+from niche_brain import scout_live_viral_trend, save_history_entry, load_history
 
 INVIDIOUS_INSTANCES = [
     "https://inv.nadeko.net",
@@ -18,268 +17,390 @@ INVIDIOUS_INSTANCES = [
     "https://inv.tux.pizza"
 ]
 
-def generate_script_from_pillars_ai():
-    """Generates a 100% unique, non-repeating topic and full 7-scene script directly from the Pillars."""
-    prompt, pillar_key, weapon, situation, angle = brain.get_pillars_prompt()
-    print(f"[*] AI DIRECTOR: Synthesizing fresh concept from Pillar: [{pillar_key}] | Weapon: [{weapon}] | Angle: [{angle}]")
+PIPED_INSTANCES = [
+    "https://pipedapi.kavin.rocks",
+    "https://pipedapi.adminforge.de",
+    "https://api.piped.private.coffee"
+]
 
-    # Step A: Ask Local Llama 3.2 to write the complete unique script
-    full_prompt = f"""
-{prompt}
+# Strict Ollama JSON Schemas (Eliminates "Expecting ',' delimiter" errors forever)
+CONCEPT_JSON_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "topic_angle": {"type": "string"},
+        "title": {"type": "string"},
+        "search_query": {"type": "string"},
+        "visual_focus": {"type": "string"}
+    },
+    "required": ["topic_angle", "title", "search_query", "visual_focus"]
+}
 
-Additionally, write a compelling, high-retention 6-to-7 scene Urdu voiceover script for this video.
-Output ONLY a valid JSON object matching this schema exactly:
-{{
-  "pillar_id": "{pillar_key}",
-  "title": "Viral Clickbait Title under 50 chars #shorts #freefire",
-  "search_query": "{weapon} free fire {situation.lower()} highlights 60fps",
-  "weapon": "{weapon}",
-  "damage": "495",
-  "player_tag": "DEVIL-999",
-  "scenes": [
-    {{"time": 0.0, "narration": "Urdu hook line arresting attention in first 3 seconds"}},
-    {{"time": 4.5, "narration": "Urdu build up of situation and enemy movement"}},
-    {{"time": 9.5, "narration": "Urdu technical secret tip or crosshair placement advice"}},
-    {{"time": 15.0, "narration": "Urdu reaction to the devastating headshot climax"}},
-    {{"time": 20.5, "narration": "Urdu challenge to viewer and DEVIL-999 tag"}},
-    {{"time": 26.0, "narration": "Urdu call to action to comment favorite gun"}}
-  ]
-}}
-"""
-
-    try:
-        ollama_url = "http://localhost:11434/api/generate"
-        payload = {
-            "model": "llama3.2",
-            "prompt": full_prompt,
-            "stream": False,
-            "options": {"temperature": 0.9, "num_predict": 450, "num_thread": 2}
+SCRIPT_JSON_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "title": {"type": "string"},
+        "description": {"type": "string"},
+        "tags": {"type": "array", "items": {"type": "string"}},
+        "pinned_comment": {"type": "string"},
+        "scenes": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "time": {"type": "number"},
+                    "narration": {"type": "string"},
+                    "english_subtitle": {"type": "string"},
+                    "focus_cue": {"type": "string"}
+                },
+                "required": ["time", "narration", "english_subtitle", "focus_cue"]
+            }
         }
-        res = requests.post(ollama_url, json=payload, timeout=25)
-        if res.status_code == 200:
-            raw_text = res.json().get("response", "").strip()
-            start_idx = raw_text.find("{")
-            end_idx = raw_text.rfind("}") + 1
-            if start_idx != -1 and end_idx != 0:
-                script_obj = json.loads(raw_text[start_idx:end_idx])
-                if "scenes" in script_obj and len(script_obj["scenes"]) >= 4:
-                    print(f"[+] Llama 3.2 AI successfully created fresh script: '{script_obj.get('title')}'")
-                    return script_obj
-    except Exception as e:
-        print(f"[!] Llama offline/timeout notice: {e}. Activating Pillar Dynamic Generator...")
+    },
+    "required": ["title", "description", "tags", "pinned_comment", "scenes"]
+}
 
-    # Step B: Infinite Pillar Combinatorial Synthesis (Never Repeats)
-    return generate_pillar_synthesized_script(pillar_key, weapon, situation, angle)
+def call_llama_json(prompt, json_schema, max_tokens=420, retries=2):
+    """Calls local Ollama Llama 3.2 with hardware-enforced JSON Schema grammar."""
+    ollama_url = os.environ.get("OLLAMA_URL", "http://localhost:11434/api/generate")
+    model_name = os.environ.get("OLLAMA_MODEL", "llama3.2")
 
-def generate_pillar_synthesized_script(pillar_key, weapon, situation, angle):
-    """Dynamic generation directly based on Pillar physics without any hardcoded strings."""
-    timestamp_seed = int(time.time() * 1000) % 10000
-    
-    title_prefixes = ["Crazy", "Secret", "Impossible", "Unreal", "God-Level", "Banned", "Pro-Player"]
-    title = f"{random.choice(title_prefixes)} {weapon} {situation}! ({angle[:22]}) #shorts #freefire"
-    
-    # Generate search query with randomized modifiers so YouTube/Reddit always returns a fresh clip
-    search_modifiers = ["montage", "highlights", "headshot rate", "fastest drag", "handcam"]
-    search_query = f"{weapon} free fire {situation.lower()} {random.choice(search_modifiers)} 60fps"
-
-    damage_lookup = {
-        "Desert Eagle": "495", "M1887": "550", "Woodpecker": "372", "MP40": "148",
-        "AWM": "300", "AC80": "345", "UMP": "172", "M1014": "550", "Groza": "210"
-    }
-    dmg = damage_lookup.get(weapon, "550")
-
-    # Dynamic Urdu sentence components generated per pillar
-    hooks = [
-        f"Agar tumhara {weapon} se headshot nahi lagta to screen ka ye angle ghaur se dekho.",
-        f"Free Fire ke 99% players {weapon} ko chalate waqt sab se badi ghalti karte hain.",
-        f"Sirf 5 seconds do, tumhara {weapon} ka drag rate double ho jayega.",
-        f"Ye gameplay check karo, kya ye 120Hz pure skill hai ya paid panel?",
-        f"Grandmaster players {weapon} ki ye secret setting kisi ko nahi batatay."
-    ]
-
-    breakdowns = [
-        f"Notice karo: Fire button ko straight up nahi balke halka sa right curve drag dena hai.",
-        f"Jab enemy {situation.lower()} mein ho, to analog button ko chhor kar single tap fire karo.",
-        f"Crosshair ko hamesha chest ke level par lock rakho taake recoil zero ho jaye.",
-        f"Situp gloo wall lagane ke foran baad switch button press karo delay khatam ho jayega."
-    ]
-
-    climaxes = [
-        f"Ye shot dekho! Crystal clear {dmg} ka red number seedha head par connect hua.",
-        f"Bina kisi frame drop ke impossible headshot! Enemy ko react karne ka mouqa tak nahi mila.",
-        f"Screen par damage notice karo: Pure red numbers bina kisi extra body hit ke."
-    ]
-
-    outros = [
-        f"Agley match mein ye {weapon} trick try karo aur batao kaisa laga.",
-        f"Agar video pasand aayi to DEVIL-999 ko follow karo aur apna favorite weapon comment karo.",
-        f"Apna headshot percentage aur device ka naam comment section mein likho."
-    ]
-
-    scenes = [
-        {"time": 0.0, "narration": random.choice(hooks)},
-        {"time": 4.5, "narration": f"Enemy samnay se rush kar raha tha aur maine wait kiya uske jump karne ka."},
-        {"time": 9.5, "narration": random.choice(breakdowns)},
-        {"time": 15.0, "narration": random.choice(climaxes)},
-        {"time": 20.5, "narration": random.choice(outros)},
-        {"time": 26.0, "narration": "DEVIL INSANITY ko subscribe karo aur next challenge ke liye ready raho!"}
-    ]
-
-    return {
-        "pillar_id": pillar_key,
-        "title": title,
-        "search_query": search_query,
-        "weapon": weapon,
-        "damage": dmg,
-        "player_tag": "DEVIL-999",
-        "scenes": scenes
+    payload = {
+        "model": model_name,
+        "prompt": prompt,
+        "format": json_schema,
+        "stream": False,
+        "options": {
+            "temperature": 0.8,
+            "num_predict": max_tokens,
+            "num_thread": 2
+        }
     }
 
-def get_cookies_arg():
-    if os.path.exists("cookies.txt") and os.path.getsize("cookies.txt") > 20:
-        return ["--cookies", "cookies.txt"]
-    cookies_env = os.environ.get("YOUTUBE_COOKIES", "")
+    last_err = None
+    for attempt in range(1, retries + 1):
+        try:
+            print(f"[*] Calling Llama AI ({model_name}) [Attempt {attempt}/{retries}]...")
+            res = requests.post(ollama_url, json=payload, timeout=90)
+            res.raise_for_status()
+            raw = res.json().get("response", "").strip()
+            parsed = json.loads(raw)
+            return parsed
+        except Exception as e:
+            last_err = e
+            print(f"[!] Llama attempt {attempt} error: {e}")
+            time.sleep(2)
+
+    raise RuntimeError(f"FATAL: AI model failed to generate structured output after {retries} attempts: {last_err}. Zero fallback policy enforced!")
+
+def load_planner_blueprint():
+    """Reads daily plan from Step 1 (daily_task_planner.py) or scouts fresh live Pillar Blueprint."""
+    plan_data = {}
+    for candidate in ["daily_plan.json", "task_plan.json"]:
+        if os.path.exists(candidate):
+            try:
+                with open(candidate, "r", encoding="utf-8") as f:
+                    plan_data = json.load(f)
+                print(f"[+] Loaded Step 1 Planner blueprint from {candidate}")
+                break
+            except Exception:
+                pass
+
+    format_type = plan_data.get("format_type", plan_data.get("type", "short"))
+    target_duration = float(plan_data.get("target_duration", random.uniform(28.0, 34.0)))
+    blueprint = scout_live_viral_trend(format_type=format_type)
+    blueprint["target_duration"] = target_duration
+    return blueprint
+
+def ai_invent_fresh_concept(blueprint):
+    """Step A: AI reads the 6-Pillar Blueprint + Live Trends and invents a brand-new query & concept."""
+    prompt = f"""You are the Lead Free Fire YouTube Strategist for DEVIL INSANITY (DEVIL-999).
+Read this Pillar & Live Trend Blueprint and invent ONE 100% NEW video concept and YouTube search query.
+
+{blueprint['prompt_context']}
+
+STRICT RULES:
+1. Never repeat any query or title from the Banned list above.
+2. 'search_query' must be 5 to 8 clean English keywords that find a REAL high-FPS Free Fire gameplay video (NO fake words, NO quotes).
+3. 'title' must be high-CTR, under 55 chars, relevant to the Pillar + Weapon + Psychology strategy, ending with #shorts #freefire (or #freefire for long).
+4. Return ONLY valid JSON matching the schema."""
+
+    concept = call_llama_json(prompt, CONCEPT_JSON_SCHEMA, max_tokens=180, retries=2)
+    print(f"[+] AI Invented Topic: {concept['title']}")
+    print(f"[+] AI Search Query: '{concept['search_query']}'")
+    return concept
+
+def prepare_cookies_file():
+    if os.path.exists("cookies.txt") and os.path.getsize("cookies.txt") > 30:
+        return "cookies.txt"
+    cookies_env = os.environ.get("YOUTUBE_COOKIES", "").strip()
     if len(cookies_env) > 30:
         with open("cookies.txt", "w", encoding="utf-8") as f:
             f.write(cookies_env)
-        print("[+] Injected YOUTUBE_COOKIES secret into cookies.txt")
-        return ["--cookies", "cookies.txt"]
-    return []
+        print("[+] Configured cookies.txt from YOUTUBE_COOKIES secret.")
+        return "cookies.txt"
+    return None
 
-def harvest_via_ytdlp(query):
-    print(f"[*] [Tier 1] yt-dlp downloading for query: '{query}'...")
-    cookie_args = get_cookies_arg()
-    
-    ydl_opts = {
-        'format': 'bestvideo[ext=mp4][height<=1080]+bestaudio[ext=m4a]/best[ext=mp4]/best',
-        'outtmpl': 'raw_gameplay.mp4',
-        'quiet': False,
-        'no_warnings': False,
-        'default_search': 'ytsearch1',
-        'noplaylist': True,
-        'extractor_args': {
-            'youtube': {
-                'player_client': ['android_creator', 'tv_embedded', 'ios', 'web_creator'],
-                'player_skip': ['configs']
+def get_video_duration(filepath):
+    try:
+        cmd = [
+            "ffprobe", "-v", "error", "-show_entries", "format=duration",
+            "-of", "default=noprint_wrappers=1:nokey=1", filepath
+        ]
+        out = subprocess.check_output(cmd, text=True).strip()
+        return float(out)
+    except Exception:
+        return 0.0
+
+def download_ytdlp(query, used_video_ids):
+    """Tier 1: yt-dlp with multi-client rotation, JS runtime detection, and duplicate-ID skip."""
+    print(f"[*] [Tier 1] yt-dlp searching top 5 fresh results for: '{query}'...")
+    cookie_file = prepare_cookies_file()
+    js_runtime = "deno" if shutil.which("deno") else ("node" if shutil.which("node") else None)
+
+    search_opts = {
+        "quiet": True,
+        "no_warnings": True,
+        "extract_flat": True,
+        "default_search": "ytsearch5",
+        "noplaylist": True
+    }
+    if cookie_file:
+        search_opts["cookiefile"] = cookie_file
+
+    candidate_ids = []
+    try:
+        with yt_dlp.YoutubeDL(search_opts) as ydl:
+            info = ydl.extract_info(f"ytsearch5:{query}", download=False)
+            for entry in info.get("entries", []):
+                vid = entry.get("id")
+                if vid and vid not in used_video_ids:
+                    candidate_ids.append((vid, entry.get("title", "")))
+    except Exception as e:
+        print(f"[!] Tier 1 Search Notice: {e}")
+
+    for vid, vtitle in candidate_ids:
+        url = f"https://www.youtube.com/watch?v={vid}"
+        print(f"[*] Attempting download of un-used clip [{vid}]: {vtitle[:45]}...")
+        dl_opts = {
+            "format": "bestvideo[ext=mp4][height<=1080]+bestaudio[ext=m4a]/best[ext=mp4][height<=1080]/best[ext=mp4]/best",
+            "outtmpl": "raw_gameplay.mp4",
+            "overwrites": True,
+            "quiet": False,
+            "extractor_args": {
+                "youtube": {
+                    "player_client": ["android_creator", "tv_embedded", "ios", "web_creator"],
+                    "player_skip": ["configs"]
+                }
             }
         }
-    }
-    if cookie_args:
-        ydl_opts['cookiefile'] = 'cookies.txt'
+        if cookie_file:
+            dl_opts["cookiefile"] = cookie_file
+        if js_runtime:
+            dl_opts["js_runtimes"] = {js_runtime: {}}
 
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([f"ytsearch1:{query}"])
-        if os.path.exists("raw_gameplay.mp4") and os.path.getsize("raw_gameplay.mp4") > 500000:
-            print("[+] Tier 1 Success: Real YouTube gameplay downloaded!")
-            return True
-    except Exception as e:
-        print(f"[!] Tier 1 Notice: {e}")
-    return False
-
-def harvest_via_invidious_api(query):
-    print(f"[*] [Tier 2] Bypassing Datacenter IP Wall via Invidious Stream API...")
-    instances = list(INVIDIOUS_INSTANCES)
-    random.shuffle(instances)
-
-    for instance in instances:
         try:
-            search_url = f"{instance}/api/v1/search?q={requests.utils.quote(query)}&type=video"
-            resp = requests.get(search_url, timeout=12)
-            if resp.status_code != 200:
-                continue
-            items = resp.json()
-            if not items:
-                continue
-
-            video_id = items[0].get("videoId")
-            if not video_id:
-                continue
-
-            vid_res = requests.get(f"{instance}/api/v1/videos/{video_id}", timeout=12)
-            if vid_res.status_code != 200:
-                continue
-            v_data = vid_res.json()
-
-            stream_url = None
-            for s in v_data.get("formatStreams", []):
-                if s.get("container") == "mp4":
-                    stream_url = s.get("url")
-                    break
-
-            if stream_url:
-                print(f"[+] Direct MP4 Stream obtained from {instance}! Downloading...")
-                stream_res = requests.get(stream_url, stream=True, timeout=35)
-                if stream_res.status_code == 200:
-                    with open("raw_gameplay.mp4", "wb") as f:
-                        for chunk in stream_res.iter_content(chunk_size=1024*1024):
-                            f.write(chunk)
-                    if os.path.exists("raw_gameplay.mp4") and os.path.getsize("raw_gameplay.mp4") > 500000:
-                        print("[+] Tier 2 Success: Real gameplay secured via Invidious!")
-                        return True
+            with yt_dlp.YoutubeDL(dl_opts) as ydl:
+                ydl.download([url])
+            if os.path.exists("raw_gameplay.mp4") and os.path.getsize("raw_gameplay.mp4") > 500000:
+                print(f"[+] Tier 1 Success: Downloaded real gameplay ({vid})!")
+                return vid
         except Exception as e:
-            print(f"[!] Invidious node {instance} error: {e}")
-            continue
-    return False
+            print(f"[!] Tier 1 Download Notice ({vid}): {e}")
+            if os.path.exists("raw_gameplay.mp4"):
+                os.remove("raw_gameplay.mp4")
+    return None
 
-def harvest_via_reddit_freefire():
-    print("[*] [Tier 3] Scraping Unblocked 60FPS Free Fire Clutches from Reddit...")
-    subreddits = ["freefire", "freefireclips"]
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) FreeFireHarvester/3.0"}
-    for sub in subreddits:
+def download_invidious(query, used_video_ids):
+    """Tier 2: Public Invidious REST API bypasses datacenter bot check."""
+    print(f"[*] [Tier 2] Querying Invidious API nodes for: '{query}'...")
+    nodes = list(INVIDIOUS_INSTANCES)
+    random.shuffle(nodes)
+    for node in nodes:
         try:
-            url = f"https://www.reddit.com/r/{sub}/hot.json?limit=25"
-            res = requests.get(url, headers=headers, timeout=10)
-            if res.status_code != 200:
+            r = requests.get(f"{node}/api/v1/search?q={requests.utils.quote(query)}&type=video", timeout=12)
+            if r.status_code != 200:
                 continue
-            data = res.json()
-            posts = data.get("data", {}).get("children", [])
-            for post in posts:
-                p_data = post.get("data", {})
-                if p_data.get("is_video"):
-                    video_url = p_data.get("media", {}).get("reddit_video", {}).get("fallback_url")
-                    if video_url:
-                        title = p_data.get("title", "Free Fire Clutch")[:40]
-                        print(f"[+] Found 60FPS Reddit Clip: {title}...")
-                        v_res = requests.get(video_url, stream=True, headers=headers, timeout=25)
-                        if v_res.status_code == 200:
-                            with open("raw_gameplay.mp4", "wb") as f:
-                                for chunk in v_res.iter_content(chunk_size=1024*1024):
+            items = [it for it in r.json() if it.get("videoId") and it.get("videoId") not in used_video_ids]
+            for item in items[:3]:
+                vid = item["videoId"]
+                vr = requests.get(f"{node}/api/v1/videos/{vid}", timeout=12)
+                if vr.status_code != 200:
+                    continue
+                vdata = vr.json()
+                stream_url = None
+                for s in vdata.get("formatStreams", []):
+                    if s.get("container") == "mp4":
+                        stream_url = s.get("url")
+                if stream_url:
+                    sr = requests.get(stream_url, stream=True, timeout=40)
+                    if sr.status_code == 200:
+                        with open("raw_gameplay.mp4", "wb") as f:
+                            for chunk in sr.iter_content(chunk_size=1024 * 1024):
+                                if chunk:
                                     f.write(chunk)
-                            if os.path.exists("raw_gameplay.mp4") and os.path.getsize("raw_gameplay.mp4") > 500000:
-                                print("[+] Tier 3 Success: Real 60FPS Reddit gameplay downloaded!")
-                                return True
+                        if os.path.exists("raw_gameplay.mp4") and os.path.getsize("raw_gameplay.mp4") > 500000:
+                            print(f"[+] Tier 2 Success via Invidious ({vid})!")
+                            return vid
         except Exception as e:
-            print(f"[!] Reddit scraper notice: {e}")
-    return False
+            print(f"[!] Invidious ({node}) notice: {e}")
+    return None
+
+def download_piped(query, used_video_ids):
+    """Tier 3: Public Piped API proxy stream fallback-free alternative."""
+    print(f"[*] [Tier 3] Querying Piped API nodes for: '{query}'...")
+    nodes = list(PIPED_INSTANCES)
+    random.shuffle(nodes)
+    for node in nodes:
+        try:
+            r = requests.get(f"{node}/search?q={requests.utils.quote(query)}&filter=videos", timeout=12)
+            if r.status_code != 200:
+                continue
+            items = r.json().get("items", [])
+            for item in items[:4]:
+                raw_url = item.get("url", "")
+                if "v=" not in raw_url:
+                    continue
+                vid = raw_url.split("v=")[-1].split("&")[0]
+                if vid in used_video_ids:
+                    continue
+                sr = requests.get(f"{node}/streams/{vid}", timeout=12)
+                if sr.status_code != 200:
+                    continue
+                streams = sr.json().get("videoStreams", [])
+                mp4_streams = [s for s in streams if s.get("format") == "MPEG_4" and not s.get("videoOnly")]
+                if not mp4_streams:
+                    mp4_streams = [s for s in streams if s.get("format") == "MPEG_4"]
+                if mp4_streams:
+                    stream_url = mp4_streams[0].get("url")
+                    vr = requests.get(stream_url, stream=True, timeout=40)
+                    if vr.status_code == 200:
+                        with open("raw_gameplay.mp4", "wb") as f:
+                            for chunk in vr.iter_content(chunk_size=1024 * 1024):
+                                if chunk:
+                                    f.write(chunk)
+                        if os.path.exists("raw_gameplay.mp4") and os.path.getsize("raw_gameplay.mp4") > 500000:
+                            print(f"[+] Tier 3 Success via Piped ({vid})!")
+                            return vid
+        except Exception as e:
+            print(f"[!] Piped ({node}) notice: {e}")
+    return None
+
+def download_reddit_freefire(used_video_ids):
+    """Tier 4: Unblocked 60FPS real Free Fire clips from Reddit communities."""
+    print("[*] [Tier 4] Harvesting fresh Free Fire clips from Reddit...")
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) FreeFireHarvest/4.0"}
+    for sub in ["freefire", "freefireclips"]:
+        for sort in ["hot", "new"]:
+            try:
+                r = requests.get(f"https://www.reddit.com/r/{sub}/{sort}.json?limit=25", headers=headers, timeout=10)
+                if r.status_code != 200:
+                    continue
+                for post in r.json().get("data", {}).get("children", []):
+                    pdata = post.get("data", {})
+                    pid = f"reddit_{pdata.get('id', '')}"
+                    if pid in used_video_ids or not pdata.get("is_video"):
+                        continue
+                    v_url = pdata.get("media", {}).get("reddit_video", {}).get("fallback_url")
+                    if v_url:
+                        vr = requests.get(v_url, headers=headers, stream=True, timeout=30)
+                        if vr.status_code == 200:
+                            with open("raw_gameplay.mp4", "wb") as f:
+                                for chunk in vr.iter_content(chunk_size=1024 * 1024):
+                                    if chunk:
+                                        f.write(chunk)
+                            if os.path.exists("raw_gameplay.mp4") and os.path.getsize("raw_gameplay.mp4") > 500000:
+                                print(f"[+] Tier 4 Success via Reddit ({pid})!")
+                                return pid
+            except Exception as e:
+                print(f"[!] Reddit ({sub}/{sort}) notice: {e}")
+    return None
+
+def ai_write_full_script(blueprint, concept, real_duration):
+    """Step C: AI writes full 7-scene Roman Urdu voiceover + English subtitles synced to downloaded clip."""
+    target_dur = round(blueprint.get("target_duration", 30.5), 1)
+    step = round(target_dur / 7.0, 1)
+    timestamps = [round(i * step, 1) for i in range(7)]
+
+    prompt = f"""Write the complete 7-scene commentary script for this real downloaded Free Fire clip.
+Channel: DEVIL INSANITY (Pro Tag: DEVIL-999)
+Title: {concept['title']}
+Pillar: {blueprint['pillar_name']} | Weapon: {blueprint['weapon']} (Headshot Damage: {blueprint['damage']})
+Psychological Hook: {blueprint['psychology_strategy']}
+Angle: {concept['topic_angle']}
+Visual Focus: {concept['visual_focus']}
+Raw Clip Duration: {real_duration:.1f}s | Target Edited Short Duration: {target_dur}s
+
+REQUIREMENTS:
+1. Create EXACTLY 7 scenes with timestamps: {timestamps}.
+2. 'narration': Natural, punchy Pakistani/Indian Roman Urdu gamer commentary (human mobile player vibe, 1-2 short sentences per scene, ZERO emojis, NEVER claim fake personal face-cam or fake 1v1 promises).
+3. 'english_subtitle': Clean English translation of each scene for international viewers.
+4. 'focus_cue': Short FFmpeg visual emphasis note (e.g., "red_damage_zoom", "crosshair_lock", "gloo_flick").
+5. 'pinned_comment': Engaging viewer question/challenge related to {blueprint['weapon']} and {concept['topic_angle']}.
+6. Output ONLY valid JSON matching the schema."""
+
+    script_obj = call_llama_json(prompt, SCRIPT_JSON_SCHEMA, max_tokens=480, retries=2)
+    return script_obj
 
 def generate_script():
-    # 1. Generate unique script and topic from Pillars
-    script_data = generate_script_from_pillars_ai()
-    query = script_data["search_query"]
-    print(f"[*] REAL HARVESTER 13.0: Searching 100% Real Gameplay for: '{query}'")
+    # 1. Read Pillars & Live Signals from niche_brain.py
+    blueprint = load_planner_blueprint()
+    history = load_history()
+    used_ids = set(history.get("video_ids", []))
 
-    # 2. Download Real Gameplay (Zero Fallback)
-    success = harvest_via_ytdlp(query)
-    if not success:
-        success = harvest_via_invidious_api(query)
-    if not success:
-        success = harvest_via_reddit_freefire()
+    # 2. AI invents unique Concept & Search Query from Pillars
+    concept = ai_invent_fresh_concept(blueprint)
+    query = concept["search_query"]
 
-    if not success or not os.path.exists("raw_gameplay.mp4") or os.path.getsize("raw_gameplay.mp4") < 500000:
-        raise RuntimeError(f"FATAL: Real video download failed for query '{query}'. Zero fallback policy enforced!")
+    # 3. Download 100% REAL fresh gameplay (Zero Fallback)
+    if os.path.exists("raw_gameplay.mp4"):
+        os.remove("raw_gameplay.mp4")
 
+    downloaded_id = download_ytdlp(query, used_ids)
+    if not downloaded_id:
+        downloaded_id = download_invidious(query, used_ids)
+    if not downloaded_id:
+        downloaded_id = download_piped(query, used_ids)
+    if not downloaded_id:
+        downloaded_id = download_reddit_freefire(used_ids)
+
+    if not downloaded_id or not os.path.exists("raw_gameplay.mp4") or os.path.getsize("raw_gameplay.mp4") < 500000:
+        raise RuntimeError(f"FATAL: All 4 real video streams failed for '{query}'. Zero fallback policy enforced!")
+
+    real_dur = get_video_duration("raw_gameplay.mp4")
     size_mb = os.path.getsize("raw_gameplay.mp4") / (1024 * 1024)
-    print(f"[+] 100% REAL GAMEPLAY SECURED: raw_gameplay.mp4 ({size_mb:.2f} MB)")
+    print(f"[+] 100% REAL GAMEPLAY LOCKED: raw_gameplay.mp4 ({size_mb:.2f} MB, {real_dur:.1f}s)")
 
-    # 3. Record query to history so it never repeats
-    brain.record_used_topic(query)
+    # 4. AI writes full 7-scene Roman Urdu + English script based on Pillar + Real Video
+    ai_script = ai_write_full_script(blueprint, concept, real_dur)
 
-    # 4. Save dynamic script to current_script.json
+    final_payload = {
+        "title": ai_script.get("title", concept["title"]),
+        "description": ai_script.get("description", ""),
+        "tags": ai_script.get("tags", ["freefire", "shorts", "headshot", "gaming"]),
+        "pinned_comment": ai_script.get("pinned_comment", ""),
+        "pillar_id": blueprint["pillar_id"],
+        "pillar_name": blueprint["pillar_name"],
+        "psychology_strategy": blueprint["psychology_strategy"],
+        "search_query": query,
+        "source_video_id": downloaded_id,
+        "weapon": blueprint["weapon"],
+        "damage": blueprint["damage"],
+        "target_duration": blueprint.get("target_duration", 30.5),
+        "player_tag": "DEVIL-999",
+        "scenes": ai_script["scenes"]
+    }
+
     with open("current_script.json", "w", encoding="utf-8") as f:
-        json.dump(script_data, f, indent=2)
+        json.dump(final_payload, f, indent=2, ensure_ascii=False)
 
-    print("[+] Dynamic Pillars Script saved successfully to current_script.json!")
+    # 5. Save query, video_id, title & pillar to permanent history to block repetition
+    save_history_entry(
+        query=query,
+        video_id=downloaded_id,
+        title=final_payload["title"],
+        pillar_id=blueprint["pillar_id"]
+    )
+    print("[+] Success: 100% AI Pillar Script + Real Gameplay saved to current_script.json!")
 
 if __name__ == "__main__":
     generate_script()
