@@ -1,4 +1,4 @@
-import os, json, time, shutil, random, subprocess, requests, yt_dlp
+import os, json, time, socket, shutil, random, subprocess, requests, yt_dlp
 from niche_brain import scout_live_viral_trend, save_history_entry, load_history
 
 PIPED = ["https://pipedapi.kavin.rocks", "https://pipedapi-libre.kavin.rocks", "https://pipedapi.leptons.xyz", "https://pipedapi.adminforge.de", "https://api.piped.private.coffee"]
@@ -6,38 +6,33 @@ INVIDIOUS = ["https://inv.nadeko.net", "https://yewtu.be", "https://invidious.ne
 
 CONCEPT_SCHEMA = {
     "type": "object",
-    "properties": {
-        "topic_angle": {"type": "string"},
-        "title": {"type": "string"},
-        "search_query": {"type": "string"},
-        "visual_focus": {"type": "string"}
-    },
+    "properties": {"topic_angle": {"type": "string"}, "title": {"type": "string"}, "search_query": {"type": "string"}, "visual_focus": {"type": "string"}},
     "required": ["topic_angle", "title", "search_query", "visual_focus"]
 }
 
 SCRIPT_SCHEMA = {
     "type": "object",
     "properties": {
-        "title": {"type": "string"},
-        "description": {"type": "string"},
-        "tags": {"type": "array", "items": {"type": "string"}},
-        "pinned_comment": {"type": "string"},
-        "scenes": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "time": {"type": "number"},
-                    "narration": {"type": "string"},
-                    "english_subtitle": {"type": "string"},
-                    "focus_cue": {"type": "string"}
-                },
-                "required": ["time", "narration", "english_subtitle", "focus_cue"]
-            }
-        }
+        "title": {"type": "string"}, "description": {"type": "string"}, "tags": {"type": "array", "items": {"type": "string"}}, "pinned_comment": {"type": "string"},
+        "scenes": {"type": "array", "items": {"type": "object", "properties": {"time": {"type": "number"}, "narration": {"type": "string"}, "english_subtitle": {"type": "string"}, "focus_cue": {"type": "string"}}, "required": ["time", "narration", "english_subtitle", "focus_cue"]}}
     },
     "required": ["title", "description", "tags", "pinned_comment", "scenes"]
 }
+
+def warp_proxy():
+    try:
+        with socket.create_connection(("127.0.0.1", 1080), timeout=1):
+            return "socks5://127.0.0.1:1080"
+    except Exception:
+        return None
+
+def clean_query(raw_q, weapon):
+    q = str(raw_q).replace("[", "").replace("]", "").replace("'", "").replace('"', "").strip()
+    if "," in q:
+        q = q.split(",")[0].strip()
+    words = q.split()[:6]
+    cleaned = " ".join(words).strip()
+    return cleaned if len(cleaned) >= 6 else f"free fire {weapon} headshot highlights"
 
 def ensure_ollama():
     base = os.environ.get("OLLAMA_URL", "http://localhost:11434").split("/api/")[0].rstrip("/")
@@ -48,7 +43,6 @@ def ensure_ollama():
     except Exception:
         pass
     if not shutil.which("ollama"):
-        print("[*] Installing Ollama...")
         subprocess.run("curl -fsSL https://ollama.com/install.sh | sh", shell=True, check=True)
     subprocess.Popen(["ollama", "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     for _ in range(15):
@@ -63,16 +57,8 @@ def call_ollama_schema(prompt, schema, max_tokens=600):
     base, models = ensure_ollama()
     model = models[0] if models else "llama3.2:1b"
     if not models:
-        print(f"[*] Pulling '{model}'...")
         subprocess.run(["ollama", "pull", model], check=True)
-    payload = {
-        "model": model,
-        "messages": [{"role": "system", "content": "Free Fire YouTube strategist. Output valid JSON strictly matching schema."}, {"role": "user", "content": prompt}],
-        "format": schema,
-        "stream": False,
-        "keep_alive": "10m",
-        "options": {"temperature": 0.5, "num_ctx": 1536, "num_predict": max_tokens, "num_thread": os.cpu_count() or 2}
-    }
+    payload = {"model": model, "messages": [{"role": "system", "content": "Free Fire YouTube strategist. Output valid JSON strictly matching schema."}, {"role": "user", "content": prompt}], "format": schema, "stream": False, "keep_alive": "10m", "options": {"temperature": 0.5, "num_ctx": 1536, "num_predict": max_tokens, "num_thread": os.cpu_count() or 2}}
     for att in range(1, 4):
         try:
             print(f"[*] Calling Ollama ({model}) [Attempt {att}/3]...")
@@ -80,12 +66,9 @@ def call_ollama_schema(prompt, schema, max_tokens=600):
             if r.status_code != 200:
                 raise RuntimeError(f"HTTP {r.status_code}: {r.text[:120]}")
             txt = r.json().get("message", {}).get("content", "").strip()
-            if not txt:
-                raise ValueError("Empty response content")
             data = json.loads(txt)
             if all(k in data and data[k] for k in schema["required"]):
                 return data
-            raise ValueError(f"Missing required keys in: {list(data.keys())}")
         except Exception as e:
             print(f"[!] Ollama attempt {att} notice: {e}")
             time.sleep(2)
@@ -97,12 +80,7 @@ def get_dur(path):
             return float(subprocess.check_output(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", path], text=True).strip())
         except Exception:
             return 0.0
-    try:
-        with open(path, "rb") as f:
-            h = f.read(64)
-        return 15.0 if (b"ftyp" in h or b"webm" in h.lower()) else 0.0
-    except Exception:
-        return 0.0
+    return 15.0
 
 def valid_mp4(p):
     return os.path.exists(p) and os.path.getsize(p) >= 350000 and get_dur(p) >= 4.0
@@ -125,15 +103,21 @@ def fetch_stream(url, hdr=None):
     return False
 
 def dl_yt(q, used):
-    print(f"[*] [Tier 1] yt-dlp searching: '{q}'...")
+    px = warp_proxy()
+    print(f"[*] [Tier 1] yt-dlp searching (WARP Proxy={'ON' if px else 'OFF'}): '{q}'...")
     js_rt = "deno" if shutil.which("deno") else ("node" if shutil.which("node") else None)
+    s_opts = {"quiet": True, "extract_flat": True, "default_search": "ytsearch5", "noplaylist": True}
+    if px:
+        s_opts["proxy"] = px
     try:
-        with yt_dlp.YoutubeDL({"quiet": True, "extract_flat": True, "default_search": "ytsearch5", "noplaylist": True}) as ydl:
+        with yt_dlp.YoutubeDL(s_opts) as ydl:
             cands = [e.get("id") for e in ydl.extract_info(f"ytsearch5:{q}", download=False).get("entries", []) if e.get("id") and e.get("id") not in used]
     except Exception:
         cands = []
     for vid in cands[:3]:
-        opts = {"format": "bestvideo[ext=mp4][height<=1080]+bestaudio[ext=m4a]/best[ext=mp4]/best", "outtmpl": "raw_gameplay.mp4", "overwrites": True, "quiet": True, "extractor_args": {"youtube": {"player_client": ["web_safari", "tv_embedded", "android_creator", "ios"], "player_skip": ["configs"]}}}
+        opts = {"format": "bestvideo[ext=mp4][height<=1080]+bestaudio[ext=m4a]/best[ext=mp4]/best", "outtmpl": "raw_gameplay.mp4", "overwrites": True, "quiet": True, "sleep_requests": 1, "extractor_args": {"youtube": {"player_client": ["web", "mweb", "web_safari"]}}}
+        if px:
+            opts["proxy"] = px
         if js_rt:
             opts["js_runtimes"] = {js_rt: {}}
         try:
@@ -142,7 +126,7 @@ def dl_yt(q, used):
             if valid_mp4("raw_gameplay.mp4"):
                 return vid
         except Exception as e:
-            print(f"[!] Tier 1 notice ({vid}): {str(e)[:80]}")
+            print(f"[!] Tier 1 notice ({vid}): {str(e)[:90]}")
         clean_tmp()
     return None
 
@@ -160,9 +144,7 @@ def dl_piped(q, used):
                 if vid in used:
                     continue
                 sr = requests.get(f"{node}/streams/{vid}", timeout=4)
-                if sr.status_code != 200:
-                    continue
-                streams = sr.json().get("videoStreams", [])
+                streams = sr.json().get("videoStreams", []) if sr.status_code == 200 else []
                 mp4s = [s for s in streams if s.get("format") == "MPEG_4" and not s.get("videoOnly")] or [s for s in streams if s.get("format") == "MPEG_4"]
                 if mp4s and fetch_stream(mp4s[0].get("url")):
                     return vid
@@ -239,11 +221,11 @@ def generate_script():
     used = set(load_history().get("video_ids", []))
 
     concept = call_ollama_schema(
-        f"Channel DEVIL INSANITY (DEVIL-999). Invent ONE new Free Fire video concept & 5-7 English word search_query (never repeat banned queries):\n{bp['prompt_context']}",
+        f"DEVIL INSANITY (DEVIL-999). Invent ONE new Free Fire concept. IMPORTANT: search_query MUST be a single plain 4-6 word phrase (NO brackets, NO lists, NO commas).\n{bp['prompt_context']}",
         CONCEPT_SCHEMA, max_tokens=220
     )
-    q = concept["search_query"]
-    print(f"[+] AI Topic: {concept['title']} | Query: '{q}'")
+    q = clean_query(concept["search_query"], bp["weapon"])
+    print(f"[+] AI Topic: {concept['title']} | Clean Query: '{q}'")
 
     clean_tmp()
     vid = dl_yt(q, used) or dl_piped(q, used) or dl_invid(q, used) or dl_dailymotion(q, used) or dl_reddit(used)
