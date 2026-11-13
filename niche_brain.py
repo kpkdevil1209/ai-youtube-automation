@@ -1,93 +1,146 @@
-"""
-niche_brain.py (Version 5.0)
-Autonomous 6-Pillar Trend Scout & 7-Stage Extended Script Architecture.
-Calibrated for 28s - 34s high-retention YouTube Shorts.
-"""
-
+import os
 import json
-from datetime import date
+import random
+import time
 
-WEAPONS_META = {
-    "Desert Eagle": {"headshot_dmg": "495", "type": "one_tap"},
-    "M1887": {"headshot_dmg": "550", "type": "shotgun_burst"},
-    "Woodpecker": {"headshot_dmg": "380", "type": "ar_tap"},
-    "AWM": {"headshot_dmg": "1100", "type": "sniper_kill"},
-    "MP40": {"headshot_dmg": "138", "type": "smg_laser"},
-    "M1014": {"headshot_dmg": "240", "type": "shotgun_close"}
-}
+class NicheBrain:
+    def __init__(self):
+        # 6 Permanent Strategic Content Pillars (Frameworks, Not Fixed Topics)
+        self.pillars = {
+            "weapon_drag_physics": {
+                "name": "Weapon Mastery & Drag Physics",
+                "core_objective": "Explain headshot angles, recoil reset, drag speeds, and fire button placement.",
+                "weapons": ["Desert Eagle", "M1887", "Woodpecker", "MP40", "AWM", "AC80", "UMP", "M1014", "Charge Buster", "Groza"],
+                "situations": ["1v1 Close Range", "Mid-Range Drag", "Jumping Enemy", "Gloo Wall Peek", "Running Target"],
+                "emotional_angles": ["Secret setting grandmasters hide", "Impossible angle discovery", "Why 99% players fail this drag"]
+            },
+            "hacker_vs_skill_investigation": {
+                "name": "Hacker Controversy & Panel vs Skill",
+                "core_objective": "Analyze whether an insane shot or movement was done via paid panel or 120Hz pure mobile reflexes.",
+                "weapons": ["Woodpecker", "M1887", "Desert Eagle", "SVD", "M500"],
+                "situations": ["Smoke Headshot", "Blind Gloo Wall Penetration", "180 Degree Flick", "Zero Recoil Spray"],
+                "emotional_angles": ["Garena anti-cheat dilemma", "Panel expose", "Is this player human?"]
+            },
+            "clutch_psychology": {
+                "name": "1v4 Solo vs Squad Clutch Formulas",
+                "core_objective": "Deconstruct high-IQ positioning, angle isolation, and 10 HP survival clutch moments.",
+                "weapons": ["M1887", "MP40", "Desert Eagle", "UMP", "Grenade + Shotgun"],
+                "situations": ["1 vs 4 Custom Room", "Grandmaster Final Zone", "Rush Attack Defense", "CS Ranked Decider"],
+                "emotional_angles": ["When your whole squad dies", "Calm nerves under pressure", "Outplaying toxic trash talkers"]
+            },
+            "nostalgia_and_lore": {
+                "name": "Old Free Fire Nostalgia & Evolution",
+                "core_objective": "Compare old golden days of Free Fire with modern meta and remember iconic moments.",
+                "weapons": ["Old M4A1", "Old Double M1887", "Old MP40 Bunny", "Old AK47 Dragon"],
+                "situations": ["Old Factory Roof Fist Fight", "Old Peak Tower Rush", "Season 1 Sakura Lobby", "Bermuda Bridge Camp"],
+                "emotional_angles": ["Before Free Fire became pay to win", "The sadness of deleted features", "Why old days were pure emotion"]
+            },
+            "secret_settings_meta": {
+                "name": "Secret DPI, Sensitivity & Button Physics",
+                "core_objective": "Reveal device-level optimizations and fire button micro-adjustments.",
+                "weapons": ["Desert Eagle", "Woodpecker", "M1887"],
+                "situations": ["Low-End Phone Smoothness", "120Hz Touch Sampling", "Zero Lag Trick", "Perfect Drag Sensitivity"],
+                "emotional_angles": ["The setting phone companies hide", "Instant headshot boost", "Device secret"]
+            },
+            "dark_game_mysteries": {
+                "name": "Dark Free Fire Lore & Glitches",
+                "core_objective": "Unravel creepy, mysterious, or game-breaking server bugs and haunted IDs.",
+                "weapons": ["AWM", "Scythe", "Crossbow"],
+                "situations": ["Banned Invisible Room", "Negative Diamond Bug", "Ghost Player in Match", "Deleted Map Area"],
+                "emotional_angles": ["Garena tried to delete this", "Creepiest glitch ever recorded", "Player vanished"]
+            }
+        }
 
-CONTENT_PILLARS = [
-    {
-        "category": "Spectating Suspicious Pro Highlights",
-        "search_query": "free fire 1v4 clutch highlights 60fps",
-        "hook_template": "Is This {weapon} Player Using Panel or Pure Reflexes?"
-    },
-    {
-        "category": "Instant Karma on Toxic Emote Spammer",
-        "search_query": "free fire toxic emote karma one tap headshot",
-        "hook_template": "He Emoted Too Early... Then {weapon} Did This!"
-    },
-    {
-        "category": "Grandmaster Tournament Impossible Moments",
-        "search_query": "free fire grandmaster solo vs squad clutch",
-        "hook_template": "When Squad Died and Player Had 1 HP Left with {weapon}..."
-    },
-    {
-        "category": "Fastest Finger Speed Handcam Breakdown",
-        "search_query": "free fire fastest m1887 one tap handcam",
-        "hook_template": "The Secret {weapon} Drag Angle That Never Misses Head!"
-    }
-]
+        self.history_file = "used_topics_history.json"
 
-def scout_live_viral_trend() -> dict:
-    today_num = date.today().timetuple().tm_yday
-    pillar = CONTENT_PILLARS[today_num % len(CONTENT_PILLARS)]
-    weapons_keys = list(WEAPONS_META.keys())
-    weapon = weapons_keys[(today_num * 2) % len(weapons_keys)]
-    meta = WEAPONS_META[weapon]
-    hook = pillar["hook_template"].format(weapon=weapon)
+    def get_pillars_prompt(self):
+        """Builds a comprehensive guide prompt for the AI to generate a brand new topic."""
+        pillar_key = random.choice(list(self.pillars.keys()))
+        selected = self.pillars[pillar_key]
 
-    return {
-        "pillar": pillar["category"],
-        "weapon": weapon,
-        "headshot_dmg": meta["headshot_dmg"],
-        "hook": hook,
-        "search_query": f"{weapon} {pillar['search_query']}"
-    }
+        weapon = random.choice(selected["weapons"])
+        situation = random.choice(selected["situations"])
+        angle = random.choice(selected["emotional_angles"])
 
-def build_retention_prompt(manifest: dict) -> str:
-    trend = scout_live_viral_trend()
-    channel_name = manifest.get("channel_name", "DEVIL INSANITY")
-    target_sec = manifest.get("tasks", {}).get("daily_short", {}).get("target_duration_sec", 29.5)
+        # Avoid repetition by feeding previously used queries
+        recent_queries = self._get_recent_history()
 
-    prompt = f"""Write an explosive 7-scene Free Fire YouTube Short script in STRICT JSON.
-Channel: {channel_name} | Target Duration: ~{target_sec}s
-Topic: {trend['hook']} | Weapon: {trend['weapon']}
+        prompt = f"""
+You are the Lead Content Director for DEVIL INSANITY (DEVIL-999), a top-tier Free Fire gaming channel.
+Your task: Invent a 100% BRAND NEW, viral, high-retention YouTube Short topic based on this pillar:
 
-RULES:
-1. No greetings. Start directly with controversy/shock.
-2. Exactly 7 sequential scenes matching 28s-34s duration.
-3. Scene 7 ends with a phrase connecting seamlessly back into Scene 1's opening.
-4. "narration_urdu": Roman Urdu gamer slang (under 7 words per scene).
-5. "narration_en": Short English subtitle (under 7 words per scene).
+PILLAR: {selected['name']}
+OBJECTIVE: {selected['core_objective']}
+FOCUS WEAPON: {weapon}
+SITUATION: {situation}
+EMOTIONAL HOOK ANGLE: {angle}
 
-OUTPUT STRICT JSON ONLY:
+STRICT RULE: Do NOT copy any of these recently used queries:
+{json.dumps(recent_queries[-10:], indent=2)}
+
+OUTPUT FORMAT ONLY (JSON):
 {{
-  "title_urdu": "{trend['hook']}",
-  "title_en": "{trend['hook']}",
-  "description_en": "{trend['hook']} #FreeFire #Shorts #FFHighlights #Gaming",
-  "featured_weapon": "{trend['weapon']}",
-  "headshot_dmg": "{trend['headshot_dmg']}",
-  "search_query": "{trend['search_query']}",
-  "infinity_loop_connector": "Bridge phrase from scene 7 back to scene 1",
-  "scenes": [
-    {{"scene_num": 1, "duration_sec": 4.0, "narration_urdu": "Shocking accusation hook line", "narration_en": "English subtitle line", "subtitle_en": "HOOK ACCUSATION", "sfx": "vine_boom"}},
-    {{"scene_num": 2, "duration_sec": 4.0, "narration_urdu": "Enemy movement tension line", "narration_en": "English subtitle line", "subtitle_en": "ENEMY RUSHING", "sfx": "bass_drop"}},
-    {{"scene_num": 3, "duration_sec": 4.2, "narration_urdu": "Editorial freeze sawal line", "narration_en": "English subtitle line", "subtitle_en": "WAIT FOR THIS", "sfx": "whoosh"}},
-    {{"scene_num": 4, "duration_sec": 4.2, "narration_urdu": "Bullet fire real damage moment", "narration_en": "English subtitle line", "subtitle_en": "BULLET CONNECTS", "sfx": "hitmarker"}},
-    {{"scene_num": 5, "duration_sec": 4.2, "narration_urdu": "In-game damage analysis line", "narration_en": "English subtitle line", "subtitle_en": "REAL DAMAGE POPUP", "sfx": "gun_cock"}},
-    {{"scene_num": 6, "duration_sec": 4.2, "narration_urdu": "Final clutch wipe reaction", "narration_en": "English subtitle line", "subtitle_en": "CLUTCH COMPLETE", "sfx": "bass_explosion"}},
-    {{"scene_num": 7, "duration_sec": 4.0, "narration_urdu": "Loop phrase leading to Scene 1", "narration_en": "Loop subtitle line", "subtitle_en": "LOOP TO START", "sfx": "whoosh"}}
-  ]
-}}"""
-    return prompt.strip()
+  "pillar_id": "{pillar_key}",
+  "title": "A high-CTR title under 55 characters with #shorts #freefire",
+  "search_query": "A realistic YouTube search query to find high quality 60fps real gameplay clip for this topic (e.g. '{weapon} free fire clutch highlights 60fps')",
+  "weapon": "{weapon}",
+  "estimated_damage": "e.g. 550 or 495 or 372",
+  "story_hook": "First 3-second Urdu hook line to stop scrolling instantly",
+  "story_body": "Main advice or dramatic breakdown in Urdu (1-2 sentences)",
+  "story_climax": "Reaction to the headshot or clutch moment in Urdu",
+  "story_outro": "Call to action or challenge to comments in Urdu"
+}}
+"""
+        return prompt, pillar_key, weapon, situation, angle
+
+    def record_used_topic(self, query):
+        """Saves query so it is never repeated."""
+        history = self._get_recent_history()
+        history.append({"query": query, "timestamp": time.time()})
+        with open(self.history_file, "w", encoding="utf-8") as f:
+            json.dump(history, f, indent=2)
+
+    def _get_recent_history(self):
+        if os.path.exists(self.history_file):
+            try:
+                with open(self.history_file, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except Exception:
+                return []
+        return []
+
+    def generate_combinatorial_topic(self, pillar_key, weapon, situation, angle):
+        """Dynamic synthesis engine if local LLM is slow or offline."""
+        modifiers = ["Crazy", "Impossible", "Secret", "God Level", "Unreal", "120Hz Fast"]
+        mod = random.choice(modifiers)
+        
+        title = f"{mod} {weapon} {situation}! ({angle[:25]}) #shorts #freefire"
+        search_query = f"{weapon} free fire {situation.lower()} highlights 60fps"
+        
+        # Ensure search query is completely fresh
+        salt = random.randint(10, 99)
+        if random.random() > 0.5:
+            search_query += f" montage"
+
+        damage_map = {
+            "Desert Eagle": "495", "M1887": "550", "Woodpecker": "372",
+            "MP40": "148", "AWM": "300", "AC80": "345", "UMP": "172", "M1014": "550"
+        }
+
+        return {
+            "pillar_id": pillar_key,
+            "title": title,
+            "search_query": search_query,
+            "weapon": weapon,
+            "estimated_damage": damage_map.get(weapon, "550"),
+            "story_hook": f"Agar tumhara {weapon} se one tap nahi lagta to ye secret angle miss mat karna.",
+            "story_body": f"Jab enemy {situation} mein ho to screen ko hamesha U-drag karo.",
+            "story_climax": f"Ye shot dekho! Pure red numbers connect hue hain.",
+            "story_outro": "Comment mein apna favorite gun batao aur DEVIL-999 ko follow karo."
+        }
+
+if __name__ == "__main__":
+    b = NicheBrain()
+    prompt, p, w, s, a = b.get_pillars_prompt()
+    print("[*] Generated Prompt for AI:")
+    print(prompt)
