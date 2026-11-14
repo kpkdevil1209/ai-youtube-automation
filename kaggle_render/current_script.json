@@ -1,75 +1,74 @@
 {
-  "title": "Devil-999 Insanity",
+  "title": "devil-999 devi-l-999 free fire concept",
   "topic": "devil-insanity",
-  "description": "Free Fire Dark Mysteries Server Bug Explained",
+  "description": "Roman Urdu pinned_comment for Topic: 'devil-999 devi-l-999 free fire concept'",
   "tags": [
-    "devil-insanity",
-    "free-fire-dark-mysteries",
-    "server-bugs",
-    "pvp"
+    "devi-l-999",
+    "free fire",
+    "concept"
   ],
-  "pinned_comment": "https://www.freefire.com/forums/threads/devil-999-insanity/1008441/",
-  "pillar": "Free Fire Dark Mysteries & Server Bugs",
-  "pillar_id": "dark_mysteries_glitches",
-  "pillar_name": "Free Fire Dark Mysteries & Server Bugs",
-  "psychology_strategy": "03_Panel_Accusation_Debate",
-  "search_query": "free fire gameplay glitch",
-  "source_video_id": "tw_TacitPowerfulPoultrySuperVinlin-z7UjB3V9NnuuAoBD",
-  "weapon": "AWM",
-  "damage": "300",
+  "pinned_comment": "{\"topic\": \"devil-999 devi-l-999 free fire concept\", \"hook\": \"13_Millisecond_Reflex_Audit\", \"clip\": \"30.0s\", \"target\": \"32.6s\"}",
+  "pillar": "DPI, Touch Sampling & Sensitivity Science",
+  "pillar_id": "device_sensitivity_meta",
+  "pillar_name": "DPI, Touch Sampling & Sensitivity Science",
+  "psychology_strategy": "13_Millisecond_Reflex_Audit",
+  "search_query": "free fire sensitivity headshot",
+  "source_video_id": "tw_ObedientAnnoyingBunnyArsonNoSexy",
+  "weapon": "M1887",
+  "damage": "550",
   "format_type": "short",
-  "target_duration": 33.6,
+  "target_duration": 32.6,
   "player_tag": "DEVIL-999",
-  "script": "A mysterious player is found dead with a strange symbol on their body. An investigation reveals that the player was killed by a powerful weapon. A close look at the crime scene reveals evidence of a dark ritual. A cryptic message is found on the server's chat log that hints at a larger conspiracy. The police launch a new investigation and gather more evidence. A shocking revelation is made that changes everything. The truth behind the Devil-999 case is finally revealed.",
-  "english_script": "The scene opens on a dark and deserted server The player's death is ruled as a homicide The police are baffled by the lack of any witnesses or clues The players are left wondering what really happened The case is getting closer to the truth The players are left stunned and confused The players can now piece together what really happened",
+  "script": "Devil-999 devi-l-999 free fire concept demo. Dpi set to 1080p for smooth gameplay. Touch sampling and sensitivity tuned for precise control. M1887 weapon demo with high damage output. Targeting system adjusted for accuracy and speed. 13 millisecond reflex audit to ensure smooth gameplay. Devil-999 devi-l-999 free fire concept demo complete.",
+  "english_script": "Devil-999 Free Fire Concept Demo Setting DPI to 1080p for Smooth Gameplay Touch Sampling and Sensitivity Tuned for Precise Control M1887 Weapon Demo with High Damage Output Targeting System Adjusted for Accuracy and Speed 13 Millisecond Reflex Audit to Ensure Smooth Gameplay Devil-999 Devi-L-999 Free Fire Concept Demo Complete",
   "scenes": [
     {
       "time": 0.0,
-      "narration": "A mysterious player is found dead with a strange symbol on their body.",
-      "text": "A mysterious player is found dead with a strange symbol on their body.",
-      "english_subtitle": "The scene opens on a dark and deserted server",
+      "narration": "Devil-999 devi-l-999 free fire concept demo.",
+      "text": "Devil-999 devi-l-999 free fire concept demo.",
+      "english_subtitle": "Devil-999 Free Fire Concept Demo",
+      "focus_cue": "Hook: 13_Millisecond_Reflex_Audit"
+    },
+    {
+      "time": 4.7,
+      "narration": "Dpi set to 1080p for smooth gameplay.",
+      "text": "Dpi set to 1080p for smooth gameplay.",
+      "english_subtitle": "Setting DPI to 1080p for Smooth Gameplay",
       "focus_cue": "crosshair_lock"
     },
     {
-      "time": 4.8,
-      "narration": "An investigation reveals that the player was killed by a powerful weapon.",
-      "text": "An investigation reveals that the player was killed by a powerful weapon.",
-      "english_subtitle": "The player's death is ruled as a homicide",
+      "time": 9.3,
+      "narration": "Touch sampling and sensitivity tuned for precise control.",
+      "text": "Touch sampling and sensitivity tuned for precise control.",
+      "english_subtitle": "Touch Sampling and Sensitivity Tuned for Precise Control",
       "focus_cue": "crosshair_lock"
     },
     {
-      "time": 9.6,
-      "narration": "A close look at the crime scene reveals evidence of a dark ritual.",
-      "text": "A close look at the crime scene reveals evidence of a dark ritual.",
-      "english_subtitle": "The police are baffled by the lack of any witnesses or clues",
+      "time": 14.0,
+      "narration": "M1887 weapon demo with high damage output.",
+      "text": "M1887 weapon demo with high damage output.",
+      "english_subtitle": "M1887 Weapon Demo with High Damage Output",
+      "focus_cue": "Pillar: DPI, Touch Sampling & Sensitivity Science"
+    },
+    {
+      "time": 18.6,
+      "narration": "Targeting system adjusted for accuracy and speed.",
+      "text": "Targeting system adjusted for accuracy and speed.",
+      "english_subtitle": "Targeting System Adjusted for Accuracy and Speed",
       "focus_cue": "crosshair_lock"
     },
     {
-      "time": 14.4,
-      "narration": "A cryptic message is found on the server's chat log that hints at a larger conspiracy.",
-      "text": "A cryptic message is found on the server's chat log that hints at a larger conspiracy.",
-      "english_subtitle": "The players are left wondering what really happened",
-      "focus_cue": "crosshair_lock"
+      "time": 23.3,
+      "narration": "13 millisecond reflex audit to ensure smooth gameplay.",
+      "text": "13 millisecond reflex audit to ensure smooth gameplay.",
+      "english_subtitle": "13 Millisecond Reflex Audit to Ensure Smooth Gameplay",
+      "focus_cue": "Clip: 30.0s -> Target: 32.6s"
     },
     {
-      "time": 19.2,
-      "narration": "The police launch a new investigation and gather more evidence.",
-      "text": "The police launch a new investigation and gather more evidence.",
-      "english_subtitle": "The case is getting closer to the truth",
-      "focus_cue": "crosshair_lock"
-    },
-    {
-      "time": 24.0,
-      "narration": "A shocking revelation is made that changes everything.",
-      "text": "A shocking revelation is made that changes everything.",
-      "english_subtitle": "The players are left stunned and confused",
-      "focus_cue": "crosshair_lock"
-    },
-    {
-      "time": 28.8,
-      "narration": "The truth behind the Devil-999 case is finally revealed.",
-      "text": "The truth behind the Devil-999 case is finally revealed.",
-      "english_subtitle": "The players can now piece together what really happened",
+      "time": 27.9,
+      "narration": "Devil-999 devi-l-999 free fire concept demo complete.",
+      "text": "Devil-999 devi-l-999 free fire concept demo complete.",
+      "english_subtitle": "Devil-999 Devi-L-999 Free Fire Concept Demo Complete",
       "focus_cue": "crosshair_lock"
     }
   ]
