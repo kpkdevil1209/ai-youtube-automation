@@ -1,95 +1,76 @@
 {
-  "title": "DEVIL INSANITY DEVIL-999: Panel vs Pure Mobile Reflex Investigation",
-  "topic": "Free Fire Concepts",
-  "description": "Panel vs Pure Mobile Reflex Investigation",
+  "title": "Devil-999 Insanity",
+  "topic": "devil-insanity",
+  "description": "Free Fire Dark Mysteries Server Bug Explained",
   "tags": [
-    "Panel vs Pure Mobile Reflex Investigation",
-    "DEVIL INSANITY DEVIL-999"
+    "devil-insanity",
+    "free-fire-dark-mysteries",
+    "server-bugs",
+    "pvp"
   ],
-  "pinned_comment": "Yes",
-  "pillar": "Panel vs Pure Mobile Reflex Investigation",
-  "pillar_id": "hacker_vs_skill_investigation",
-  "pillar_name": "Panel vs Pure Mobile Reflex Investigation",
-  "psychology_strategy": "13_Millisecond_Reflex_Audit",
-  "search_query": "free fire shotgun 2 shot headshot",
-  "source_video_id": "dm_x83k30w",
-  "weapon": "M1887",
-  "damage": "550",
-  "format_type": "long",
-  "target_duration": 895.5,
+  "pinned_comment": "https://www.freefire.com/forums/threads/devil-999-insanity/1008441/",
+  "pillar": "Free Fire Dark Mysteries & Server Bugs",
+  "pillar_id": "dark_mysteries_glitches",
+  "pillar_name": "Free Fire Dark Mysteries & Server Bugs",
+  "psychology_strategy": "03_Panel_Accusation_Debate",
+  "search_query": "free fire gameplay glitch",
+  "source_video_id": "tw_TacitPowerfulPoultrySuperVinlin-z7UjB3V9NnuuAoBD",
+  "weapon": "AWM",
+  "damage": "300",
+  "format_type": "short",
+  "target_duration": 33.6,
   "player_tag": "DEVIL-999",
-  "script": "In a world of high-stakes competition, only the strongest survive. The stakes are high, but the players are ready. The game is on, and the players are giving it their all. The players are focused, their eyes fixed on the prize. But then, the opponent steps in. The players must react faster than ever before. The outcome is far from certain. But which one will come out on top? 13_Millisecond_Reflex_Audit 33.2s",
-  "english_script": "In a world of high-stakes competition, only the strongest survive. The stakes are high, but the players are ready. The game is on, and the players are giving it their all. The players are focused, their eyes fixed on the prize. But then, the opponent steps in. The players must react faster than ever before. The outcome is far from certain. But which one will come out on top? 13_Millisecond_Reflex_Audit 33.2s",
+  "script": "A mysterious player is found dead with a strange symbol on their body. An investigation reveals that the player was killed by a powerful weapon. A close look at the crime scene reveals evidence of a dark ritual. A cryptic message is found on the server's chat log that hints at a larger conspiracy. The police launch a new investigation and gather more evidence. A shocking revelation is made that changes everything. The truth behind the Devil-999 case is finally revealed.",
+  "english_script": "The scene opens on a dark and deserted server The player's death is ruled as a homicide The police are baffled by the lack of any witnesses or clues The players are left wondering what really happened The case is getting closer to the truth The players are left stunned and confused The players can now piece together what really happened",
   "scenes": [
     {
       "time": 0.0,
-      "narration": "In a world of high-stakes competition, only the strongest survive.",
-      "text": "In a world of high-stakes competition, only the strongest survive.",
-      "english_subtitle": "In a world of high-stakes competition, only the strongest survive.",
-      "focus_cue": "Panel"
+      "narration": "A mysterious player is found dead with a strange symbol on their body.",
+      "text": "A mysterious player is found dead with a strange symbol on their body.",
+      "english_subtitle": "The scene opens on a dark and deserted server",
+      "focus_cue": "crosshair_lock"
     },
     {
-      "time": 127.9,
-      "narration": "The stakes are high, but the players are ready.",
-      "text": "The stakes are high, but the players are ready.",
-      "english_subtitle": "The stakes are high, but the players are ready.",
-      "focus_cue": "Panel"
+      "time": 4.8,
+      "narration": "An investigation reveals that the player was killed by a powerful weapon.",
+      "text": "An investigation reveals that the player was killed by a powerful weapon.",
+      "english_subtitle": "The player's death is ruled as a homicide",
+      "focus_cue": "crosshair_lock"
     },
     {
-      "time": 255.9,
-      "narration": "The game is on, and the players are giving it their all.",
-      "text": "The game is on, and the players are giving it their all.",
-      "english_subtitle": "The game is on, and the players are giving it their all.",
-      "focus_cue": "Panel"
+      "time": 9.6,
+      "narration": "A close look at the crime scene reveals evidence of a dark ritual.",
+      "text": "A close look at the crime scene reveals evidence of a dark ritual.",
+      "english_subtitle": "The police are baffled by the lack of any witnesses or clues",
+      "focus_cue": "crosshair_lock"
     },
     {
-      "time": 383.8,
-      "narration": "The players are focused, their eyes fixed on the prize.",
-      "text": "The players are focused, their eyes fixed on the prize.",
-      "english_subtitle": "The players are focused, their eyes fixed on the prize.",
-      "focus_cue": "Panel"
+      "time": 14.4,
+      "narration": "A cryptic message is found on the server's chat log that hints at a larger conspiracy.",
+      "text": "A cryptic message is found on the server's chat log that hints at a larger conspiracy.",
+      "english_subtitle": "The players are left wondering what really happened",
+      "focus_cue": "crosshair_lock"
     },
     {
-      "time": 511.7,
-      "narration": "But then, the opponent steps in.",
-      "text": "But then, the opponent steps in.",
-      "english_subtitle": "But then, the opponent steps in.",
-      "focus_cue": "Pure Mobile Reflex Investigation"
+      "time": 19.2,
+      "narration": "The police launch a new investigation and gather more evidence.",
+      "text": "The police launch a new investigation and gather more evidence.",
+      "english_subtitle": "The case is getting closer to the truth",
+      "focus_cue": "crosshair_lock"
     },
     {
-      "time": 639.6,
-      "narration": "The players must react faster than ever before.",
-      "text": "The players must react faster than ever before.",
-      "english_subtitle": "The players must react faster than ever before.",
-      "focus_cue": "Pure Mobile Reflex Investigation"
+      "time": 24.0,
+      "narration": "A shocking revelation is made that changes everything.",
+      "text": "A shocking revelation is made that changes everything.",
+      "english_subtitle": "The players are left stunned and confused",
+      "focus_cue": "crosshair_lock"
     },
     {
-      "time": 767.6,
-      "narration": "The outcome is far from certain.",
-      "text": "The outcome is far from certain.",
-      "english_subtitle": "The outcome is far from certain.",
-      "focus_cue": "Panel"
-    },
-    {
-      "time": 895.5,
-      "narration": "But which one will come out on top?",
-      "text": "But which one will come out on top?",
-      "english_subtitle": "But which one will come out on top?",
-      "focus_cue": "Panel"
-    },
-    {
-      "time": 895.5,
-      "narration": "13_Millisecond_Reflex_Audit",
-      "text": "13_Millisecond_Reflex_Audit",
-      "english_subtitle": "13_Millisecond_Reflex_Audit",
-      "focus_cue": "Panel"
-    },
-    {
-      "time": 895.5,
-      "narration": "33.2s",
-      "text": "33.2s",
-      "english_subtitle": "33.2s",
-      "focus_cue": "Panel"
+      "time": 28.8,
+      "narration": "The truth behind the Devil-999 case is finally revealed.",
+      "text": "The truth behind the Devil-999 case is finally revealed.",
+      "english_subtitle": "The players can now piece together what really happened",
+      "focus_cue": "crosshair_lock"
     }
   ]
 }
