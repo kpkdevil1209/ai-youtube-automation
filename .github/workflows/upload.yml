@@ -95,8 +95,22 @@ jobs:
       - name: Step 6 - Kaggle Render (Fast CPU Mode, Zero Fallback)
         run: |
           pip install -q six python-slugify python-dateutil
+          python -c 'import json,os; u=json.load(open(os.path.expanduser("~/.kaggle/kaggle.json")))["username"]; p="kaggle_render/kernel-metadata.json"; m=json.load(open(p)); s=m.get("id","devil-video-render-engine").split("/")[-1]; m.update({"id":u+"/"+s,"title":s,"enable_gpu":"false"}); json.dump(m,open(p,"w"),indent=2); print("[*] Target Kernel:",m["id"])'
           echo "[*] Pushing kernel to Kaggle..."
-          kaggle kernels push -p kaggle_render
+          set +e
+          kaggle kernels push -p kaggle_render > /tmp/kpush.log 2>&1
+          PUSH_RC=$?
+          set -e
+          cat /tmp/kpush.log
+          if [ $PUSH_RC -ne 0 ]; then
+            if grep -q "409" /tmp/kpush.log; then
+              echo "[!] Kernel conflict (409). Switching to fresh unblocked slug..."
+              python -c 'import json,os,sys; u=json.load(open(os.path.expanduser("~/.kaggle/kaggle.json")))["username"]; p="kaggle_render/kernel-metadata.json"; m=json.load(open(p)); s="devil-render-v"+sys.argv[1]+"-"+sys.argv[2]; m.update({"id":u+"/"+s,"title":s,"enable_gpu":"false"}); json.dump(m,open(p,"w"),indent=2); print("[*] Fresh Kernel:",m["id"])' "${{ github.run_number }}" "${{ github.run_attempt }}"
+              kaggle kernels push -p kaggle_render
+            else
+              exit $PUSH_RC
+            fi
+          fi
           KERNEL_ID=$(python -c "import json; print(json.load(open('kaggle_render/kernel-metadata.json'))['id'])")
           for i in $(seq 1 70); do
             STATUS=$(kaggle kernels status "$KERNEL_ID")
