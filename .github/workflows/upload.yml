@@ -95,51 +95,18 @@ jobs:
       - name: Step 6 - Kaggle Render (Fast CPU Mode, Zero Fallback)
         run: |
           pip install -q six python-slugify python-dateutil
-          python3 - <<'PY'
-          import json, os, re
-          cred_path = os.path.expanduser("~/.kaggle/kaggle.json")
-          with open(cred_path) as f:
-              user = json.load(f)["username"]
-          meta_path = "kaggle_render/kernel-metadata.json"
-          with open(meta_path) as f:
-              meta = json.load(f)
-          raw_slug = meta.get("id", f"{user}/devil-insanity-render").split("/")[-1]
-          slug = re.sub(r"[^a-z0-9-]+", "-", raw_slug.lower()).strip("-") or "devil-insanity-render"
-          meta["id"] = f"{user}/{slug}"
-          meta["title"] = slug
-          meta["enable_gpu"] = "false"
-          with open(meta_path, "w") as f:
-              json.dump(meta, f, indent=2)
-          print("Kernel metadata synced:", meta["id"], "| title:", meta["title"])
-          PY
-
+          python3 -c 'import json, os, re; u=json.load(open(os.path.expanduser("~/.kaggle/kaggle.json")))["username"]; p="kaggle_render/kernel-metadata.json"; m=json.load(open(p)); s=re.sub(r"[^a-z0-9-]+","-",m.get("id",f"{u}/devil-insanity-render").split("/")[-1].lower()).strip("-") or "devil-insanity-render"; m["id"]=f"{u}/{s}"; m["title"]=s; m["enable_gpu"]="false"; json.dump(m,open(p,"w"),indent=2); print("Synced:",m["id"],"title:",m["title"])'
           set +e
           PUSH_OUT=$(kaggle kernels push -p kaggle_render 2>&1)
           PUSH_RC=$?
           set -e
           echo "$PUSH_OUT"
-
           if [ $PUSH_RC -ne 0 ] || echo "$PUSH_OUT" | grep -qi "409"; then
-            echo "[!] Kaggle slug conflict/rejected. Rotating to fresh unique slug..."
+            echo "[!] Kaggle 409/conflict detected. Rotating to fresh unique slug..."
             NEW_SLUG="devil-render-v${{ github.run_number }}-${{ github.run_attempt }}-$(date +%s | tail -c 5)"
-            python3 - "$NEW_SLUG" <<'PY'
-          import json, os, sys
-          new_slug = sys.argv[1]
-          with open(os.path.expanduser("~/.kaggle/kaggle.json")) as f:
-              user = json.load(f)["username"]
-          meta_path = "kaggle_render/kernel-metadata.json"
-          with open(meta_path) as f:
-              meta = json.load(f)
-          meta["id"] = f"{user}/{new_slug}"
-          meta["title"] = new_slug
-          meta["enable_gpu"] = "false"
-          with open(meta_path, "w") as f:
-              json.dump(meta, f, indent=2)
-          print("Rotated kernel to:", meta["id"])
-          PY
+            python3 -c 'import json, os, sys; ns=sys.argv[1]; u=json.load(open(os.path.expanduser("~/.kaggle/kaggle.json")))["username"]; p="kaggle_render/kernel-metadata.json"; m=json.load(open(p)); m["id"]=f"{u}/{ns}"; m["title"]=ns; m["enable_gpu"]="false"; json.dump(m,open(p,"w"),indent=2); print("Rotated:",m["id"])' "$NEW_SLUG"
             kaggle kernels push -p kaggle_render
           fi
-
           KERNEL_ID=$(python3 -c 'import json; print(json.load(open("kaggle_render/kernel-metadata.json"))["id"])')
           echo "[*] Polling Kaggle Kernel: $KERNEL_ID"
           for i in $(seq 1 90); do
@@ -150,13 +117,15 @@ jobs:
             fi
             if echo "$STATUS_OUT" | grep -qi "error"; then
               kaggle kernels output "$KERNEL_ID" -p . || true
+              cat *.log 2>/dev/null || true
               exit 1
             fi
             sleep 15
           done
           kaggle kernels output "$KERNEL_ID" -p .
           ls -lh final_output.mp4
-          - name: Step 7 - Upload & Schedule to YouTube (18:00 PKT)
+
+      - name: Step 7 - Upload & Schedule to YouTube (18:00 PKT)
         env:
           YOUTUBE_TOKEN_PICKLE: ${{ secrets.YOUTUBE_TOKEN_PICKLE }}
         run: python upload_video.py
