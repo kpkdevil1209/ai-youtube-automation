@@ -95,7 +95,15 @@ jobs:
       - name: Step 6 - Kaggle Render (Fast CPU Mode, Zero Fallback)
         run: |
           pip install -q six python-slugify python-dateutil
-          python3 -c 'import json, os, re; u=json.load(open(os.path.expanduser("~/.kaggle/kaggle.json")))["username"]; p="kaggle_render/kernel-metadata.json"; m=json.load(open(p)); s=re.sub(r"[^a-z0-9-]+","-",m.get("id",f"{u}/devil-insanity-render").split("/")[-1].lower()).strip("-") or "devil-insanity-render"; m["id"]=f"{u}/{s}"; m["title"]=s; m["enable_gpu"]="false"; json.dump(m,open(p,"w"),indent=2); print("Synced:",m["id"],"title:",m["title"])'
+          rm -rf kaggle_assets && mkdir -p kaggle_assets
+          cp -f raw_gameplay.mp4 final_audio.wav current_script.json kaggle_assets/
+          cp -f subtitles.srt subtitles_en.srt kaggle_assets/ 2>/dev/null || true
+          python3 -c 'import json, os; u=json.load(open(os.path.expanduser("~/.kaggle/kaggle.json")))["username"]; json.dump({"title":"devil-insanity-assets","id":f"{u}/devil-insanity-assets","licenses":[{"name":"CC0-1.0"}]}, open("kaggle_assets/dataset-metadata.json","w"), indent=2)'
+          kaggle datasets version -p kaggle_assets -m "Run ${{ github.run_number }}-${{ github.run_attempt }}" --dir-mode zip || kaggle datasets create -p kaggle_assets --dir-mode zip
+          echo "[*] Waiting 35s for Kaggle to index fresh assets..."
+          sleep 35
+
+          python3 -c 'import json, os, re; u=json.load(open(os.path.expanduser("~/.kaggle/kaggle.json")))["username"]; p="kaggle_render/kernel-metadata.json"; m=json.load(open(p)); s=re.sub(r"[^a-z0-9-]+","-",m.get("id",f"{u}/devil-video-render-engine").split("/")[-1].lower()).strip("-") or "devil-video-render-engine"; m["id"]=f"{u}/{s}"; m["title"]=s; m["enable_gpu"]=False; m["enable_internet"]=True; m["dataset_sources"]=[f"{u}/devil-insanity-assets"]; json.dump(m,open(p,"w"),indent=2); print("Synced:",m["id"],"dataset:",m["dataset_sources"])'
           set +e
           PUSH_OUT=$(kaggle kernels push -p kaggle_render 2>&1)
           PUSH_RC=$?
@@ -104,7 +112,7 @@ jobs:
           if [ $PUSH_RC -ne 0 ] || echo "$PUSH_OUT" | grep -qi "409"; then
             echo "[!] Kaggle 409/conflict detected. Rotating to fresh unique slug..."
             NEW_SLUG="devil-render-v${{ github.run_number }}-${{ github.run_attempt }}-$(date +%s | tail -c 5)"
-            python3 -c 'import json, os, sys; ns=sys.argv[1]; u=json.load(open(os.path.expanduser("~/.kaggle/kaggle.json")))["username"]; p="kaggle_render/kernel-metadata.json"; m=json.load(open(p)); m["id"]=f"{u}/{ns}"; m["title"]=ns; m["enable_gpu"]="false"; json.dump(m,open(p,"w"),indent=2); print("Rotated:",m["id"])' "$NEW_SLUG"
+            python3 -c 'import json, os, sys; ns=sys.argv[1]; u=json.load(open(os.path.expanduser("~/.kaggle/kaggle.json")))["username"]; p="kaggle_render/kernel-metadata.json"; m=json.load(open(p)); m["id"]=f"{u}/{ns}"; m["title"]=ns; m["enable_gpu"]=False; m["enable_internet"]=True; m["dataset_sources"]=[f"{u}/devil-insanity-assets"]; json.dump(m,open(p,"w"),indent=2); print("Rotated:",m["id"])' "$NEW_SLUG"
             kaggle kernels push -p kaggle_render
           fi
           KERNEL_ID=$(python3 -c 'import json; print(json.load(open("kaggle_render/kernel-metadata.json"))["id"])')
