@@ -1,77 +1,82 @@
 {
-  "title": "Devil-999 Free Fire Concept",
+  "title": "Devil-999 Panel vs Pure Skill",
   "topic": "devil-insanity",
-  "description": "Nostalgic return to Old Free Fire with Devil-999",
+  "description": "Pillar: Panel vs Pure Mobile Reflex Investigation",
   "tags": [
-    "devil-999",
-    "free fire",
-    "old free fire",
-    "nostalgia",
-    "meta evolution"
+    "devil-999 panel",
+    "pure skill",
+    "mobile reflex investigation",
+    "awe-inspiring",
+    "skill gap",
+    "ego challenge",
+    "awakening",
+    "reflexes",
+    "deviation",
+    "targeting"
   ],
-  "pinned_comment": "https://www.freefire.com/ devil-999",
-  "pillar": "Old Free Fire Nostalgia & Meta Evolution",
-  "pillar_id": "old_nostalgia_lore",
-  "pillar_name": "Old Free Fire Nostalgia & Meta Evolution",
-  "psychology_strategy": "53_360_Gloo_Reflex_Test",
-  "search_query": "free fire factory fight old map zones",
-  "source_video_id": "tw_CautiousElegantApeRaccAttack-b8kmPcMbOQQRVdkF",
-  "weapon": "Old M4A1",
-  "damage": "175",
+  "pinned_comment": "12_Skill_Gap_Ego_Challenge",
+  "pillar": "Panel vs Pure Mobile Reflex Investigation",
+  "pillar_id": "hacker_vs_skill_investigation",
+  "pillar_name": "Panel vs Pure Mobile Reflex Investigation",
+  "psychology_strategy": "12_Skill_Gap_Ego_Challenge",
+  "search_query": "free fire awm impossible headshot",
+  "source_video_id": "tw_PunchyAnimatedCamelImGlitch-uWiyvNssX3gyMCnS",
+  "weapon": "AWM",
+  "damage": "300",
   "format_type": "short",
-  "target_duration": 27.8,
+  "target_duration": 33.1,
   "player_tag": "DEVIL-999",
-  "script": "Players return to Old Free Fire with Devil-999 Devil-999 is a new concept that brings back the old days The M4A1 rifle is a classic choice for Devil-999 Devil-999 brings back the old map 53_360_Gloo_Reflex_Test Devil-999 is a new concept that brings back the old days and meta evolution Get ready to experience Devil-999 with all new features and gameplay mechanics Devil-999 is a new concept that brings back the old days and meta evolution",
-  "english_script": "The nostalgia is back Experience the revival of Old Free Fire Get ready to experience the nostalgia like never before Experience the nostalgia like never before Experience the nostalgia like never before Experience the nostalgia like never before Experience the nostalgia like never before",
+  "script": "A seasoned investigator is presented with a Devil-999 panel case The team must analyze the data to determine the cause of the target's deviation from expected behavior As they dig deeper, they realize that pure skill alone is not enough to solve the case A sudden twist reveals a hidden pattern in the data, forcing the team to adapt their strategy The team must now navigate a complex web of variables and external factors to solve the case As they near the solution, the team realizes that pure skill is not enough to overcome the ego challenge of deviating from expected behavior In a final push, the team must use all their skills and reflexes to pinpoint the target's true location",
+  "english_script": "The devil-999 panel: a high-stakes challenge for mobile reflexes and skills Data analysis: uncovering the truth behind the Devil-999 panel The limits of pure skill: a new challenge emerges A new pattern emerges: can they adapt and overcome? Navigating complexity: the Devil-999 panel demands precision The ego challenge: can they stay focused and avoid deviation? The final push: using pure skill and reflexes to solve the case",
   "scenes": [
     {
       "time": 0.0,
-      "narration": "Players return to Old Free Fire with Devil-999",
-      "text": "Players return to Old Free Fire with Devil-999",
-      "english_subtitle": "The nostalgia is back",
-      "focus_cue": "Glowing logo of Devil-999 appears on screen"
+      "narration": "A seasoned investigator is presented with a Devil-999 panel case",
+      "text": "A seasoned investigator is presented with a Devil-999 panel case",
+      "english_subtitle": "The devil-999 panel: a high-stakes challenge for mobile reflexes and skills",
+      "focus_cue": "devil-999 panel"
     },
     {
-      "time": 4.0,
-      "narration": "Devil-999 is a new concept that brings back the old days",
-      "text": "Devil-999 is a new concept that brings back the old days",
-      "english_subtitle": "Experience the revival of Old Free Fire",
-      "focus_cue": "Players are shown playing with the M4A1 rifle"
+      "time": 4.7,
+      "narration": "The team must analyze the data to determine the cause of the target's deviation from expected behavior",
+      "text": "The team must analyze the data to determine the cause of the target's deviation from expected behavior",
+      "english_subtitle": "Data analysis: uncovering the truth behind the Devil-999 panel",
+      "focus_cue": "data analysis"
     },
     {
-      "time": 7.9,
-      "narration": "The M4A1 rifle is a classic choice for Devil-999",
-      "text": "The M4A1 rifle is a classic choice for Devil-999",
-      "english_subtitle": "Get ready to experience the nostalgia like never before",
-      "focus_cue": "Players are shown playing with the M4A1 rifle"
+      "time": 9.5,
+      "narration": "As they dig deeper, they realize that pure skill alone is not enough to solve the case",
+      "text": "As they dig deeper, they realize that pure skill alone is not enough to solve the case",
+      "english_subtitle": "The limits of pure skill: a new challenge emerges",
+      "focus_cue": "limits of pure skill"
     },
     {
-      "time": 11.9,
-      "narration": "Devil-999 brings back the old map 53_360_Gloo_Reflex_Test",
-      "text": "Devil-999 brings back the old map 53_360_Gloo_Reflex_Test",
-      "english_subtitle": "Experience the nostalgia like never before",
-      "focus_cue": "Players are shown playing with the M4A1 rifle on 53_360_Gloo_Reflex_Test"
+      "time": 14.2,
+      "narration": "A sudden twist reveals a hidden pattern in the data, forcing the team to adapt their strategy",
+      "text": "A sudden twist reveals a hidden pattern in the data, forcing the team to adapt their strategy",
+      "english_subtitle": "A new pattern emerges: can they adapt and overcome?",
+      "focus_cue": "new pattern emerges"
     },
     {
-      "time": 15.9,
-      "narration": "Devil-999 is a new concept that brings back the old days and meta evolution",
-      "text": "Devil-999 is a new concept that brings back the old days and meta evolution",
-      "english_subtitle": "Experience the nostalgia like never before",
-      "focus_cue": "Players are shown playing with the M4A1 rifle on 53_360_Gloo_Reflex_Test"
+      "time": 18.9,
+      "narration": "The team must now navigate a complex web of variables and external factors to solve the case",
+      "text": "The team must now navigate a complex web of variables and external factors to solve the case",
+      "english_subtitle": "Navigating complexity: the Devil-999 panel demands precision",
+      "focus_cue": "complexity demands precision"
     },
     {
-      "time": 19.9,
-      "narration": "Get ready to experience Devil-999 with all new features and gameplay mechanics",
-      "text": "Get ready to experience Devil-999 with all new features and gameplay mechanics",
-      "english_subtitle": "Experience the nostalgia like never before",
-      "focus_cue": "Players are shown playing with the M4A1 rifle on 53_360_Gloo_Reflex_Test"
+      "time": 23.6,
+      "narration": "As they near the solution, the team realizes that pure skill is not enough to overcome the ego challenge of deviating from expected behavior",
+      "text": "As they near the solution, the team realizes that pure skill is not enough to overcome the ego challenge of deviating from expected behavior",
+      "english_subtitle": "The ego challenge: can they stay focused and avoid deviation?",
+      "focus_cue": "ego challenge"
     },
     {
-      "time": 23.8,
-      "narration": "Devil-999 is a new concept that brings back the old days and meta evolution",
-      "text": "Devil-999 is a new concept that brings back the old days and meta evolution",
-      "english_subtitle": "Experience the nostalgia like never before",
-      "focus_cue": "Players are shown playing with the M4A1 rifle on 53_360_Gloo_Reflex_Test"
+      "time": 28.4,
+      "narration": "In a final push, the team must use all their skills and reflexes to pinpoint the target's true location",
+      "text": "In a final push, the team must use all their skills and reflexes to pinpoint the target's true location",
+      "english_subtitle": "The final push: using pure skill and reflexes to solve the case",
+      "focus_cue": "final push"
     }
   ]
 }
