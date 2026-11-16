@@ -1,170 +1,158 @@
-"""
-generate_audio.py (Version 5.0)
-Extended Mobile Gamer Human Audio Engine.
-- Urdu Voice: ur-PK-AsadNeural (+14% speed, human respiratory micro-pauses).
-- English Subtitles: subtitles_en.srt synchronized across all 7 scenes (~28s-34s).
-- Mobile Tempered Glass Thumb-Tap Foley (-32dB resonance).
-- Mobile Earphone Mic EQ (Warmth at 150Hz + High Clarity at 3500Hz).
-"""
+# generate_audio.py - AI Voiceover + Auto-Ducked Gaming Music + Synced Pop Subtitles
+import os, re, json, time, asyncio, random, shutil, subprocess, requests, edge_tts
 
-import os
-import json
-import asyncio
-import math
-import wave
-import struct
-import edge_tts
+SCRIPT_FILE = "current_script.json"
+OUT_AUDIO = "final_audio.wav"
+SRT_MAIN = "subtitles.srt"
+SRT_EN = "subtitles_en.srt"
+UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
 
-SCRIPT_PATH = "current_script.json"
-URDU_VOICE = "ur-PK-AsadNeural"
-ENGLISH_VOICE = "en-US-ChristopherNeural"
+BACKUP_BGM = [
+    "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Voxel%20Revolution.mp3",
+    "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Rising%20Game.mp3",
+    "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Cypher.mp3",
+    "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Impact%20Moderato.mp3"
+]
 
-OUTPUT_URDU_MP3 = "voiceover.mp3"
-OUTPUT_EN_MP3 = "voiceover_en.mp3"
-OUTPUT_FINAL_WAV = "final_audio.wav"
-OUTPUT_URDU_SRT = "subtitles.srt"
-OUTPUT_EN_SRT = "subtitles_en.srt"
-OUTPUT_THUMB_FOLEY = "mobile_thumb_foley.wav"
+def fmt_srt(sec):
+    ms = int(round(max(0.0, sec) * 1000))
+    h, rem = divmod(ms, 3600000)
+    m, rem = divmod(rem, 60000)
+    s, ms = divmod(rem, 1000)
+    return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
 
-def load_script_data() -> dict:
-    if not os.path.exists(SCRIPT_PATH):
-        raise FileNotFoundError(f"{SCRIPT_PATH} nahi mila! Pehle generate_script.py run karein.")
-    with open(SCRIPT_PATH, "r", encoding="utf-8") as f:
-        return json.load(f)
+def clean_tts(txt):
+    t = re.sub(r"[\[\]\(\)\*#_`\"<>]", " ", str(txt or ""))
+    return re.sub(r"\s+", " ", t).strip()
 
-def inject_human_breaths_and_pauses(text: str) -> str:
-    words = text.split()
-    if len(words) <= 4:
-        return text
+def probe_dur(path):
+    cmd = ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", path]
+    return float(subprocess.check_output(cmd, text=True).strip())
 
-    humanized = []
-    for i, w in enumerate(words):
-        humanized.append(w)
-        if (i + 1) % 6 == 0 and i != len(words) - 1:
-            if not w.endswith((".", "!", "?", ",")):
-                humanized[-1] = w + "..."
-    return " ".join(humanized)
+async def synth_clip(text, out_mp3):
+    for voice in ("en-IN-PrabhatNeural", "hi-IN-MadhurNeural"):
+        try:
+            comm = edge_tts.Communicate(text, voice, rate="+14%")
+            await comm.save(out_mp3)
+            if os.path.exists(out_mp3) and os.path.getsize(out_mp3) > 1000:
+                return True
+        except Exception:
+            await asyncio.sleep(1)
+    return False
 
-async def synthesize_voiceover(text: str, voice: str, output_path: str, rate: str = "+14%", pitch: str = "+2Hz"):
-    print(f"[*] Synthesizing Human Voice ({voice}) -> {output_path}...")
-    human_text = inject_human_breaths_and_pauses(text)
-    communicate = edge_tts.Communicate(text=human_text, voice=voice, rate=rate, pitch=pitch)
-    await communicate.save(output_path)
-    print(f"[+] Voiceover generated: {output_path}")
-
-def generate_srt_subtitles(scenes: list, text_key: str, srt_path: str):
-    print(f"[*] Building synchronized subtitles -> {srt_path}...")
-    current_ms = 0
-    entries = []
-
-    for idx, sc in enumerate(scenes, start=1):
-        dur_sec = float(sc.get("duration_sec", 4.0))
-        dur_ms = int(dur_sec * 1000)
-        start_ms = current_ms
-        end_ms = start_ms + dur_ms
-        current_ms = end_ms
-
-        def fmt_time(ms):
-            h = ms // 3600000
-            ms %= 3600000
-            m = ms // 60000
-            ms %= 60000
-            s = ms // 1000
-            milli = ms % 1000
-            return f"{h:02d}:{m:02d}:{s:02d},{milli:03d}"
-
-        raw_line = sc.get(text_key, sc.get("narration_urdu", "")).strip()
-        entries.append(f"{idx}\n{fmt_time(start_ms)} --> {fmt_time(end_ms)}\n{raw_line.upper()}\n")
-
-    with open(srt_path, "w", encoding="utf-8") as f:
-        f.write("\n".join(entries))
-    print(f"[+] Subtitles saved: {srt_path}")
-
-def synthesize_mobile_screen_tap_foley(duration_sec: float, output_wav: str):
-    print(f"[*] Synthesizing Mobile Screen Glass Thumb-Tap Foley ({duration_sec:.1f}s)...")
-    sample_rate = 44100
-    total_samples = int(sample_rate * duration_sec)
-    samples = [0.0] * total_samples
-
-    tap_intervals = [0.28, 0.16, 0.32, 0.19, 0.44, 0.22, 0.18, 0.35]
-    current_pos = int(sample_rate * 0.10)
-    tap_idx = 0
-
-    while current_pos < total_samples - 2500:
-        tap_duration = 650
-        center_freq = 195 if (tap_idx % 2 == 0) else 240
-        amplitude = 0.026
-
-        for i in range(tap_duration):
-            if current_pos + i < total_samples:
-                decay = math.exp(-i / (tap_duration * 0.22))
-                noise = math.sin(2 * math.pi * center_freq * (i / sample_rate))
-                samples[current_pos + i] += amplitude * noise * decay
-
-        current_pos += int(sample_rate * tap_intervals[tap_idx % len(tap_intervals)])
-        tap_idx += 1
-
-    with wave.open(output_wav, "w") as wf:
-        wf.setnchannels(1)
-        wf.setsampwidth(2)
-        wf.setframerate(sample_rate)
-        raw_bytes = bytearray()
-        for s in samples:
-            clipped = max(-1.0, min(1.0, s))
-            raw_bytes.extend(struct.pack("<h", int(clipped * 32767)))
-        wf.writeframes(raw_bytes)
-    print(f"[+] Mobile Thumb Foley ready: {output_wav}")
-
-def mix_with_mobile_earphone_eq(voice_mp3: str, foley_wav: str, output_final: str):
-    print("[*] Applying Mobile Earphone EQ & Mixing Audio via FFmpeg...")
-    cmd = (
-        f'ffmpeg -y -i "{voice_mp3}" -i "{foley_wav}" '
-        f'-filter_complex "[0:a]equalizer=f=150:t=q:w=1.2:g=2.5,equalizer=f=3500:t=q:w=1.0:g=1.5,volume=1.0[v];'
-        f'[1:a]volume=0.40[t];[v][t]amix=inputs=2:duration=first[out]" '
-        f'-map "[out]" "{output_final}" -loglevel error'
-    )
-    res = os.system(cmd)
-    if res != 0 or not os.path.exists(output_final):
-        os.system(f'ffmpeg -y -i "{voice_mp3}" "{output_final}" -loglevel error')
-    print(f"[+] Master Audio Track Ready: {output_final}")
-
-def get_audio_duration(file_path: str) -> float:
+def download_bgm(dest="bgm_track.mp3"):
+    hdr = {"User-Agent": UA}
     try:
-        import subprocess
-        out = subprocess.check_output(
-            f'ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "{file_path}"',
-            shell=True
-        ).decode().strip()
-        return float(out)
+        r = requests.get("https://archive.org/advancedsearch.php", params={"q": "mediatype:audio AND (phonk OR trap OR electronic) AND format:VBR MP3", "fl[]": "identifier", "rows": 12, "output": "json"}, headers=hdr, timeout=10)
+        docs = (r.json().get("response") or {}).get("docs") or [] if r.status_code == 200 else []
+        random.shuffle(docs)
+        for doc in docs[:5]:
+            ident = doc.get("identifier")
+            if not ident:
+                continue
+            mr = requests.get(f"https://archive.org/metadata/{ident}", headers=hdr, timeout=10)
+            for f in (mr.json().get("files") or []) if mr.status_code == 200 else []:
+                nm, sz = f.get("name", ""), int(f.get("size") or 0)
+                if nm.lower().endswith(".mp3") and 500_000 < sz < 12_000_000:
+                    url = f"https://archive.org/download/{ident}/{nm}"
+                    with requests.get(url, headers=hdr, stream=True, timeout=25) as ar:
+                        if ar.status_code < 400:
+                            with open(dest, "wb") as fp:
+                                for c in ar.iter_content(131072):
+                                    if c:
+                                        fp.write(c)
+                            if os.path.getsize(dest) > 300_000:
+                                print(f"[+] BGM Locked (Archive.org): {nm}")
+                                return dest
     except Exception:
-        return 29.5
+        pass
+    for url in random.sample(BACKUP_BGM, len(BACKUP_BGM)):
+        try:
+            with requests.get(url, headers=hdr, stream=True, timeout=20) as ar:
+                if ar.status_code < 400:
+                    with open(dest, "wb") as fp:
+                        for c in ar.iter_content(131072):
+                            if c:
+                                fp.write(c)
+                    if os.path.getsize(dest) > 200_000:
+                        print(f"[+] BGM Locked (Incompetech): {os.path.basename(url)}")
+                        return dest
+        except Exception:
+            pass
+    return None
+
+def split_chunks(text, t0, dur):
+    words = text.split()
+    if not words:
+        return []
+    groups = [" ".join(words[i : i + 4]) for i in range(0, len(words), 4)]
+    total_ch = max(1, sum(len(g) for g in groups))
+    out, cur = [], t0
+    for g in groups:
+        gd = dur * (len(g) / total_ch)
+        out.append((cur, cur + gd, g))
+        cur += gd
+    return out
 
 def main():
     print("\n==========================================")
-    print("[*] AUDIO ENGINE 5.0: EXTENDED MOBILE HUMAN VOICE")
+    print("[*] AUDIO & SUBTITLE ENGINE: VOICE + BGM")
     print("==========================================")
+    if not os.path.exists(SCRIPT_FILE):
+        raise FileNotFoundError("current_script.json nahi mila!")
+    data = json.load(open(SCRIPT_FILE, "r", encoding="utf-8"))
+    scenes = data.get("scenes") or [{"narration": data.get("script", "DEVIL 999 clutch!"), "english_subtitle": data.get("english_script", "DEVIL 999 clutch!")}]
 
-    data = load_script_data()
-    scenes = data.get("scenes", [])
-    urdu_text = data.get("narration_urdu", data.get("narration", "")).strip()
-    en_text = data.get("narration_en", "Is this trick pure reflexes or secret config?").strip()
+    os.makedirs("tmp_aud", exist_ok=True)
+    wav_list, main_subs, en_subs = [], [], []
+    cur_t, srt_idx = 0.0, 1
 
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(
-        synthesize_voiceover(urdu_text, URDU_VOICE, OUTPUT_URDU_MP3, rate="+14%", pitch="+2Hz")
-    )
-    loop.run_until_complete(
-        synthesize_voiceover(en_text, ENGLISH_VOICE, OUTPUT_EN_MP3, rate="+12%", pitch="+1Hz")
-    )
+    for i, sc in enumerate(scenes):
+        nar = clean_tts(sc.get("narration") or sc.get("text") or "")
+        eng = clean_tts(sc.get("english_subtitle") or nar)
+        if not nar:
+            continue
+        mp3_p, wav_p = f"tmp_aud/s_{i}.mp3", f"tmp_aud/s_{i}.wav"
+        ok = asyncio.run(synth_clip(nar, mp3_p))
+        if not ok:
+            raise RuntimeError(f"TTS failed on scene {i}")
+        subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", mp3_p, "-af", "apad=pad_dur=0.12", "-ar", "44100", "-ac", "1", wav_p], check=True)
+        sdur = probe_dur(wav_p)
+        wav_list.append(wav_p)
+        for st, en, chunk in split_chunks(nar, cur_t, sdur):
+            main_subs.append(f"{srt_idx}\n{fmt_srt(st)} --> {fmt_srt(en)}\n{chunk}\n")
+            en_subs.append(f"{srt_idx}\n{fmt_srt(st)} --> {fmt_srt(en)}\n{eng}\n" if chunk == split_chunks(nar, cur_t, sdur)[0][2] else f"{srt_idx}\n{fmt_srt(st)} --> {fmt_srt(en)}\n{chunk}\n")
+            srt_idx += 1
+        cur_t += sdur
 
-    generate_srt_subtitles(scenes, "narration_urdu", OUTPUT_URDU_SRT)
-    generate_srt_subtitles(scenes, "subtitle_en", OUTPUT_EN_SRT)
+    if not wav_list:
+        raise RuntimeError("No voice segments generated!")
 
-    dur = get_audio_duration(OUTPUT_URDU_MP3)
-    synthesize_mobile_screen_tap_foley(dur, OUTPUT_THUMB_FOLEY)
-    mix_with_mobile_earphone_eq(OUTPUT_URDU_MP3, OUTPUT_THUMB_FOLEY, OUTPUT_FINAL_WAV)
+    with open("tmp_aud/list.txt", "w") as f:
+        for w in wav_list:
+            f.write(f"file '{os.path.abspath(w)}'\n")
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "concat", "-safe", "0", "-i", "tmp_aud/list.txt", "-c", "copy", "voice_only.wav"], check=True)
+    vdur = probe_dur("voice_only.wav")
 
-    print("\n[+] AUDIO ENGINE 5.0 COMPLETE: Perfect Audio-Duration Sync!\n")
+    with open(SRT_MAIN, "w", encoding="utf-8") as f:
+        f.write("\n".join(main_subs))
+    with open(SRT_EN, "w", encoding="utf-8") as f:
+        f.write("\n".join(en_subs))
+
+    bgm = download_bgm()
+    if bgm:
+        fc = (
+            "[1:a]aresample=44100,aformat=sample_fmts=fltp:channel_layouts=stereo,volume=0.30[bgm];"
+            "[0:a]aresample=44100,aformat=sample_fmts=fltp:channel_layouts=stereo,asplit=2[v1][v2];"
+            "[bgm][v1]sidechaincompress=threshold=0.02:ratio=6:attack=40:release=350[duck];"
+            "[v2][duck]amix=inputs=2:duration=first,volume=1.75[out]"
+        )
+        subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", "voice_only.wav", "-stream_loop", "-1", "-i", bgm, "-filter_complex", fc, "-map", "[out]", "-t", f"{vdur:.2f}", "-ar", "44100", "-ac", "2", OUT_AUDIO], check=True)
+    else:
+        subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", "voice_only.wav", "-ar", "44100", "-ac", "2", OUT_AUDIO], check=True)
+
+    shutil.rmtree("tmp_aud", ignore_errors=True)
+    print(f"[+] Saved {OUT_AUDIO} ({probe_dur(OUT_AUDIO):.2f}s) + {SRT_MAIN} + {SRT_EN}")
 
 if __name__ == "__main__":
     main()
