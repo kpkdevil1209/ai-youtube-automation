@@ -1,140 +1,138 @@
-import os
-import re
-import json
-import subprocess
+# kaggle_render/render_video.py - Pro 9:16 Viral Shorts Editor (Burned Subs + Hook + Color Grade + Audio Mix)
+import os, re, json, shutil, subprocess
 
 OUTPUT_VIDEO = "final_output.mp4"
-AUDIO_FILE = "final_audio.wav"
-SCRIPT_FILE = "current_script.json"
 
-
-def candidate_dirs():
-    dirs = ["/kaggle/input/devil-insanity-assets", ".", "gameplay_vault", "kaggle_render", "kaggle_render/gameplay_vault"]
-    if os.path.isdir("/kaggle/input"):
-        for sub in os.listdir("/kaggle/input"):
-            p = os.path.join("/kaggle/input", sub)
-            if os.path.isdir(p) and p not in dirs:
-                dirs.append(p)
-    return dirs
-
-
-def find_file(exact_names=None, exts=None):
-    for d in candidate_dirs():
-        if not os.path.isdir(d):
-            continue
-        if exact_names:
-            for name in exact_names:
-                p = os.path.join(d, name)
-                if os.path.isfile(p) and os.path.getsize(p) > 0:
-                    return p
-        if exts:
-            for f in sorted(os.listdir(d)):
-                if f.endswith(exts) and f != OUTPUT_VIDEO and not f.startswith("base_"):
-                    p = os.path.join(d, f)
-                    if os.path.getsize(p) > 10000:
-                        return p
+def find_asset(name):
+    if os.path.exists(name):
+        return name
+    if os.path.exists("/kaggle/input"):
+        for root, _, files in os.walk("/kaggle/input"):
+            if name in files:
+                return os.path.join(root, name)
     return None
 
+def probe_json(path):
+    cmd = ["ffprobe", "-v", "error", "-show_streams", "-show_format", "-of", "json", path]
+    return json.loads(subprocess.check_output(cmd, text=True))
 
-def probe_duration(path, default=32.0):
+def find_bold_font():
+    for root in ("/usr/share/fonts", "/kaggle/input"):
+        if os.path.exists(root):
+            for r, _, files in os.walk(root):
+                for f in files:
+                    if "bold" in f.lower() and f.endswith(".ttf"):
+                        return os.path.join(r, f)
+    return None
+
+def has_subtitles_filter():
     try:
-        out = subprocess.check_output(
-            ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", path],
-            text=True,
-            timeout=15,
-        ).strip()
-        dur = float(out)
-        if 4.0 <= dur <= 3600.0:
-            return dur
+        out = subprocess.check_output(["ffmpeg", "-hide_banner", "-filters"], stderr=subprocess.STDOUT, text=True)
+        return " subtitles " in out
     except Exception:
-        pass
-    return default
+        return False
 
+def wrap_title(txt, width=24):
+    words, lines, cur = str(txt or "DEVIL-999 PRO CLUTCH").upper().split(), [], ""
+    for w in words:
+        if len(cur) + len(w) + 1 <= width:
+            cur = f"{cur} {w}".strip()
+        else:
+            if cur:
+                lines.append(cur)
+            cur = w
+        if len(lines) == 2:
+            break
+    if cur and len(lines) < 2:
+        lines.append(cur)
+    return "\n".join(lines)[:54]
 
 def main():
     print("\n==========================================")
-    print("[*] KAGGLE TURBO ENGINE: 45-SECOND FAST RENDER")
+    print("[*] KAGGLE PRO SHORTS EDITOR (60FPS)")
     print("==========================================\n")
 
-    raw_gameplay = find_file(exact_names=["raw_gameplay.mp4"], exts=(".mp4", ".mkv"))
-    if not raw_gameplay:
-        raise RuntimeError("FATAL: Real gameplay clip missing in Kaggle input/working dirs. Zero fallback enforced!")
-    print(f"[+] Kaggle Turbo: Locked real clip -> {raw_gameplay}")
+    raw_clip = find_asset("raw_gameplay.mp4")
+    audio_file = find_asset("final_audio.wav")
+    srt_src = find_asset("subtitles.srt")
+    script_src = find_asset("current_script.json")
 
-    audio_track = find_file(exact_names=[AUDIO_FILE, "voiceover.mp3"])
-    if not audio_track:
-        raise RuntimeError("FATAL: Audio track (final_audio.wav) missing in Kaggle input/working dirs.")
-    print(f"[+] Kaggle Turbo: Locked audio -> {audio_track}")
+    if not raw_clip or not os.path.exists(raw_clip):
+        raise RuntimeError("FATAL: raw_gameplay.mp4 missing!")
+    if not audio_file or not os.path.exists(audio_file):
+        raise RuntimeError("FATAL: final_audio.wav missing!")
 
-    target_dur = probe_duration(audio_track, default=32.0)
-    print(f"[+] Target Render Duration: {target_dur:.2f}s")
+    vinfo = probe_json(raw_clip)
+    v_streams = [s for s in vinfo.get("streams", []) if s.get("codec_type") == "video"]
+    a_streams = [s for s in vinfo.get("streams", []) if s.get("codec_type") == "audio"]
+    vw = int(v_streams[0].get("width", 1280)) if v_streams else 1280
+    vh = int(v_streams[0].get("height", 720)) if v_streams else 720
+    vdur = float(vinfo.get("format", {}).get("duration", 30.0))
 
-    urdu_title = "PRO PLAY BREAKDOWN"
-    script_path = find_file(exact_names=[SCRIPT_FILE])
-    if script_path:
+    ainfo = probe_json(audio_file)
+    target_dur = max(10.0, float(ainfo.get("format", {}).get("duration", 28.0)))
+
+    hook_title = "DEVIL-999 INSANE CLUTCH"
+    if script_src:
         try:
-            with open(script_path, "r", encoding="utf-8") as f:
-                sdata = json.load(f)
-                raw_t = sdata.get("title_urdu") or sdata.get("title") or urdu_title
-                cleaned_t = re.sub(r"[^\x20-\x7E]+", " ", str(raw_t)).strip()
-                if cleaned_t:
-                    urdu_title = cleaned_t[:46]
+            sc = json.load(open(script_src, "r", encoding="utf-8"))
+            hook_title = sc.get("title") or sc.get("topic") or hook_title
         except Exception:
             pass
+    hook_title = re.sub(r"[^\w\s\-!?.,']", "", hook_title).strip()
+    open("temp_title.txt", "w", encoding="utf-8").write(wrap_title(hook_title))
 
-    title_txt = "temp_title.txt"
-    with open(title_txt, "w", encoding="utf-8") as tf:
-        tf.write(urdu_title)
+    use_subs = False
+    if srt_src and os.path.getsize(srt_src) > 10 and has_subtitles_filter():
+        shutil.copy2(srt_src, "subs.srt")
+        use_subs = True
 
-    reticle = "temp_reticle.png"
-    subprocess.run(
-        [
-            "ffmpeg", "-y", "-nostdin", "-f", "lavfi", "-i", "color=c=black@0.0:s=260x260:d=1",
-            "-vf", "drawbox=x=8:y=8:w=244:h=244:color=red@0.85:t=6",
-            "-frames:v", "1", reticle, "-loglevel", "error",
-        ],
-        check=True,
+    font_path = find_bold_font()
+    font_opt = f":fontfile={font_path}" if font_path else ""
+
+    if vh > vw:
+        fg_chain = "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920"
+    else:
+        fg_chain = "scale=1080:-2"
+
+    v_filter = (
+        "[0:v]setpts=PTS-STARTPTS,split=2[vbg][vfg];"
+        "[vbg]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,eq=brightness=-0.14:saturation=1.25,gblur=sigma=26[bg];"
+        f"[vfg]{fg_chain},eq=contrast=1.18:saturation=1.35:brightness=0.02,unsharp=5:5:0.7:5:5:0.0[fg];"
+        "[bg][fg]overlay=(W-w)/2:(H-h)/2,"
+        f"drawtext=text='DEVIL-999'{font_opt}:fontsize=36:fontcolor=yellow:box=1:boxcolor=red@0.85:boxborderw=10:x=(w-text_w)/2:y=95,"
+        f"drawtext=textfile=temp_title.txt{font_opt}:fontsize=44:fontcolor=white:borderw=4:bordercolor=black:box=1:boxcolor=black@0.55:boxborderw=12:line_spacing=8:x=(w-text_w)/2:y=165"
     )
 
-    filter_complex = (
-        "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,"
-        "setpts=PTS/1.04[base];"
-        "[base]eq=contrast='if(between(t,8.0,12.0),1.35,1.16)':saturation=1.3:brightness=-0.02[enhanced];"
-        "[enhanced]drawbox=x=180:y=140:w=720:h=90:color=black@0.5:t=fill[masked];"
-        "[masked]drawtext=text='PRO PLAY BREAKDOWN':fontcolor=white:fontsize=28:borderw=2:bordercolor=red:x=(w-text_w)/2:y=170[v_header];"
-        "[v_header][1:v]overlay=x=(W-w)/2:y=(H-h)/2-60:enable='between(t,4.5,6.2)'[v_focus1];"
-        "[v_focus1][1:v]overlay=x=(W-w)/2:y=(H-h)/2-60:enable='between(t,15.0,16.7)'[v_focus2];"
-        f"[v_focus2]drawtext=textfile='{title_txt}':fontcolor=yellow:fontsize=38:borderw=3:bordercolor=black:x=(w-text_w)/2:y=85[v_out]"
-    )
+    if use_subs:
+        v_filter += ",subtitles=subs.srt:force_style='FontName=DejaVu Sans,FontSize=20,PrimaryColour=&H0000FFFF&,OutlineColour=&H00000000&,BorderStyle=1,Outline=2.5,Shadow=1,Alignment=2,MarginV=80'"
 
-    cmd = [
-        "ffmpeg", "-y", "-nostdin", "-threads", "4",
-        "-fflags", "+genpts", "-stream_loop", "-1", "-i", raw_gameplay,
-        "-loop", "1", "-i", reticle,
-        "-i", audio_track,
-        "-filter_complex", filter_complex,
-        "-map", "[v_out]", "-map", "2:a",
+    v_filter += "[vout]"
+
+    if a_streams:
+        a_filter = ";[1:a]aresample=44100,volume=1.0[vo];[0:a]aresample=44100,volume=0.18[sfx];[vo][sfx]amix=inputs=2:duration=first,volume=1.45[aout]"
+        a_map = "[aout]"
+    else:
+        a_filter = ""
+        a_map = "1:a"
+
+    cmd = ["ffmpeg", "-y", "-nostdin"]
+    if vdur < target_dur:
+        cmd += ["-stream_loop", "-1"]
+    cmd += [
+        "-fflags", "+genpts", "-i", raw_clip, "-i", audio_file,
+        "-filter_complex", v_filter + a_filter,
+        "-map", "[vout]", "-map", a_map,
         "-t", f"{target_dur:.2f}",
-        "-c:v", "libx264", "-preset", "ultrafast", "-b:v", "4800k",
-        "-r", "60", "-pix_fmt", "yuv420p",
-        "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart",
-        "-loglevel", "error", OUTPUT_VIDEO,
+        "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-r", "60", "-pix_fmt", "yuv420p",
+        "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", OUTPUT_VIDEO
     ]
 
-    print(f"[*] Turbo Rendering 60FPS Video ({target_dur:.2f}s) to {OUTPUT_VIDEO}...")
-    proc = subprocess.run(cmd, capture_output=True, text=True)
-
-    for tmp in (reticle, title_txt):
-        if os.path.exists(tmp):
-            os.remove(tmp)
-
-    if proc.returncode == 0 and os.path.exists(OUTPUT_VIDEO) and os.path.getsize(OUTPUT_VIDEO) > 100000:
-        vsize = os.path.getsize(OUTPUT_VIDEO) / (1024 * 1024)
-        print(f"\n[+] TURBO RENDER SUCCESS: {OUTPUT_VIDEO} ({vsize:.2f} MB)")
-    else:
-        print("FFMPEG STDERR:", proc.stderr[-500:] if proc.stderr else "none")
-        raise RuntimeError("Kaggle turbo rendering failed.")
-
+    print(f"[*] Rendering {vw}x{vh} -> 1080x1920 60FPS ({target_dur:.1f}s) | Subs={use_subs}")
+    subprocess.run(cmd, check=True)
+    if not os.path.exists(OUTPUT_VIDEO) or os.path.getsize(OUTPUT_VIDEO) < 50000:
+        raise RuntimeError("Output video invalid!")
+    print(f"[+] RENDER COMPLETE: {OUTPUT_VIDEO} ({os.path.getsize(OUTPUT_VIDEO)/1048576:.2f} MB)")
 
 if __name__ == "__main__":
     main()
