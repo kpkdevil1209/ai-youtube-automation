@@ -1,82 +1,76 @@
 {
-  "title": "Devil-999 Panel vs Pure Skill",
-  "topic": "devil-insanity",
-  "description": "Pillar: Panel vs Pure Mobile Reflex Investigation",
+  "title": "Free Fire Solo vs Squad Pillar 1v4 IQ Breakdown",
+  "topic": "devil-insanity-devil-999",
+  "description": "Pillar 1v4 solo vs squad clutch IQ analysis",
   "tags": [
-    "devil-999 panel",
-    "pure skill",
-    "mobile reflex investigation",
-    "awe-inspiring",
-    "skill gap",
-    "ego challenge",
-    "awakening",
-    "reflexes",
-    "deviation",
-    "targeting"
+    "FFSolo",
+    "FFSVsSquad",
+    "Pillar1v4",
+    "IQBreakdown"
   ],
-  "pinned_comment": "12_Skill_Gap_Ego_Challenge",
-  "pillar": "Panel vs Pure Mobile Reflex Investigation",
-  "pillar_id": "hacker_vs_skill_investigation",
-  "pillar_name": "Panel vs Pure Mobile Reflex Investigation",
-  "psychology_strategy": "12_Skill_Gap_Ego_Challenge",
-  "search_query": "free fire awm impossible headshot",
-  "source_video_id": "tw_PunchyAnimatedCamelImGlitch-uWiyvNssX3gyMCnS",
-  "weapon": "AWM",
-  "damage": "300",
-  "format_type": "short",
-  "target_duration": 33.1,
+  "pinned_comment": "58_Lag_Compensation_Trick",
+  "pillar": "1v4 Solo vs Squad Clutch IQ",
+  "pillar_id": "clutch_psychology",
+  "pillar_name": "1v4 Solo vs Squad Clutch IQ",
+  "psychology_strategy": "58_Lag_Compensation_Trick",
+  "search_query": "free fire solo squad gameplay",
+  "source_video_id": "tw_BraveHardCasetteBibleThump",
+  "weapon": "M1887",
+  "damage": "550",
+  "format_type": "long",
+  "target_duration": 963.3,
   "player_tag": "DEVIL-999",
-  "script": "A seasoned investigator is presented with a Devil-999 panel case The team must analyze the data to determine the cause of the target's deviation from expected behavior As they dig deeper, they realize that pure skill alone is not enough to solve the case A sudden twist reveals a hidden pattern in the data, forcing the team to adapt their strategy The team must now navigate a complex web of variables and external factors to solve the case As they near the solution, the team realizes that pure skill is not enough to overcome the ego challenge of deviating from expected behavior In a final push, the team must use all their skills and reflexes to pinpoint the target's true location",
-  "english_script": "The devil-999 panel: a high-stakes challenge for mobile reflexes and skills Data analysis: uncovering the truth behind the Devil-999 panel The limits of pure skill: a new challenge emerges A new pattern emerges: can they adapt and overcome? Navigating complexity: the Devil-999 panel demands precision The ego challenge: can they stay focused and avoid deviation? The final push: using pure skill and reflexes to solve the case",
+  "script": "Solo player's M1887 picks up Pillar 1, but struggles with compound damage. Squad starts to take control of Pillar 1, with a well-coordinated push and compound damage. Solo player's M1887 picks up Pillar 3, but struggles with compound damage again. Squad starts to take control of Pillar 3, with a well-coordinated push and compound damage. Solo player's M1887 picks up Pillar 1, but struggles with compound damage. Squad starts to take control of Pillar 4, with a well-coordinated push and compound damage. Solo player's M1887 picks up a kill on the enemy team's Pillar 1 player.",
+  "english_script": "Solo Player Struggles with Compound Damage Squad Takes Control of Pillar 1 Solo Player Struggles Again Squad Takes Control of Pillar 3 Solo Player Struggles with Compound Damage Squad Takes Control of Pillar 4 Solo Player Takes Down Enemy Team Pillar 1 Player",
   "scenes": [
     {
-      "time": 0.0,
-      "narration": "A seasoned investigator is presented with a Devil-999 panel case",
-      "text": "A seasoned investigator is presented with a Devil-999 panel case",
-      "english_subtitle": "The devil-999 panel: a high-stakes challenge for mobile reflexes and skills",
-      "focus_cue": "devil-999 panel"
+      "time": 29.9,
+      "narration": "Solo player's M1887 picks up Pillar 1, but struggles with compound damage.",
+      "text": "Solo player's M1887 picks up Pillar 1, but struggles with compound damage.",
+      "english_subtitle": "Solo Player Struggles with Compound Damage",
+      "focus_cue": "Yes, he has picked a good gun for solo play but it won't save him from this situation. He needs to adjust his strategy soon or risk getting destroyed by the enemy team's Pillar 1 player."
     },
     {
-      "time": 4.7,
-      "narration": "The team must analyze the data to determine the cause of the target's deviation from expected behavior",
-      "text": "The team must analyze the data to determine the cause of the target's deviation from expected behavior",
-      "english_subtitle": "Data analysis: uncovering the truth behind the Devil-999 panel",
-      "focus_cue": "data analysis"
+      "time": 137.6,
+      "narration": "Squad starts to take control of Pillar 1, with a well-coordinated push and compound damage.",
+      "text": "Squad starts to take control of Pillar 1, with a well-coordinated push and compound damage.",
+      "english_subtitle": "Squad Takes Control of Pillar 1",
+      "focus_cue": "Yes, the squad has taken control of Pillar 1 and is now pushing forward. They have managed to get some good compound damage out of this situation."
     },
     {
-      "time": 9.5,
-      "narration": "As they dig deeper, they realize that pure skill alone is not enough to solve the case",
-      "text": "As they dig deeper, they realize that pure skill alone is not enough to solve the case",
-      "english_subtitle": "The limits of pure skill: a new challenge emerges",
-      "focus_cue": "limits of pure skill"
+      "time": 275.2,
+      "narration": "Solo player's M1887 picks up Pillar 3, but struggles with compound damage again.",
+      "text": "Solo player's M1887 picks up Pillar 3, but struggles with compound damage again.",
+      "english_subtitle": "Solo Player Struggles Again",
+      "focus_cue": "He has picked a good gun for solo play but it won't save him from this situation. He needs to adjust his strategy soon or risk getting destroyed by the enemy team's Pillar 1 player."
     },
     {
-      "time": 14.2,
-      "narration": "A sudden twist reveals a hidden pattern in the data, forcing the team to adapt their strategy",
-      "text": "A sudden twist reveals a hidden pattern in the data, forcing the team to adapt their strategy",
-      "english_subtitle": "A new pattern emerges: can they adapt and overcome?",
-      "focus_cue": "new pattern emerges"
+      "time": 412.8,
+      "narration": "Squad starts to take control of Pillar 3, with a well-coordinated push and compound damage.",
+      "text": "Squad starts to take control of Pillar 3, with a well-coordinated push and compound damage.",
+      "english_subtitle": "Squad Takes Control of Pillar 3",
+      "focus_cue": "Yes, the squad has taken control of Pillar 3 and is now pushing forward. They have managed to get some good compound damage out of this situation."
     },
     {
-      "time": 18.9,
-      "narration": "The team must now navigate a complex web of variables and external factors to solve the case",
-      "text": "The team must now navigate a complex web of variables and external factors to solve the case",
-      "english_subtitle": "Navigating complexity: the Devil-999 panel demands precision",
-      "focus_cue": "complexity demands precision"
+      "time": 550.5,
+      "narration": "Solo player's M1887 picks up Pillar 1, but struggles with compound damage.",
+      "text": "Solo player's M1887 picks up Pillar 1, but struggles with compound damage.",
+      "english_subtitle": "Solo Player Struggles with Compound Damage",
+      "focus_cue": "He has picked a good gun for solo play but it won't save him from this situation. He needs to adjust his strategy soon or risk getting destroyed by the enemy team's Pillar 1 player."
     },
     {
-      "time": 23.6,
-      "narration": "As they near the solution, the team realizes that pure skill is not enough to overcome the ego challenge of deviating from expected behavior",
-      "text": "As they near the solution, the team realizes that pure skill is not enough to overcome the ego challenge of deviating from expected behavior",
-      "english_subtitle": "The ego challenge: can they stay focused and avoid deviation?",
-      "focus_cue": "ego challenge"
+      "time": 688.1,
+      "narration": "Squad starts to take control of Pillar 4, with a well-coordinated push and compound damage.",
+      "text": "Squad starts to take control of Pillar 4, with a well-coordinated push and compound damage.",
+      "english_subtitle": "Squad Takes Control of Pillar 4",
+      "focus_cue": "Yes, the squad has taken control of Pillar 4 and is now pushing forward. They have managed to get some good compound damage out of this situation."
     },
     {
-      "time": 28.4,
-      "narration": "In a final push, the team must use all their skills and reflexes to pinpoint the target's true location",
-      "text": "In a final push, the team must use all their skills and reflexes to pinpoint the target's true location",
-      "english_subtitle": "The final push: using pure skill and reflexes to solve the case",
-      "focus_cue": "final push"
+      "time": 825.7,
+      "narration": "Solo player's M1887 picks up a kill on the enemy team's Pillar 1 player.",
+      "text": "Solo player's M1887 picks up a kill on the enemy team's Pillar 1 player.",
+      "english_subtitle": "Solo Player Takes Down Enemy Team Pillar 1 Player",
+      "focus_cue": "Yes, the solo player has taken down the enemy team's Pillar 1 player and is now in a good position to take out their remaining players."
     }
   ]
 }
