@@ -1,14 +1,5 @@
-# comment_reply_bot.py - Phase 4 Live Engagement Bot for DEVIL Gaming
-
-import os
-import re
-import json
-import time
-import base64
-import pickle
-import random
-import subprocess
-import urllib.request
+# comment_reply_bot.py - Agent 6: Pro Gamer Engagement Bot
+import os, re, json, time, base64, pickle, random, subprocess, urllib.request
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
@@ -16,206 +7,89 @@ from googleapiclient.errors import HttpError
 try:
     from empire_safety_shield import record_quota_usage
 except Exception:
-    def record_quota_usage(units=50):
-        pass
+    def record_quota_usage(units=50): pass
 
-STATE_FILE = "replied_comments.json"
-OLLAMA_TAGS_URL = "http://localhost:11434/api/tags"
-OLLAMA_API_URL = "http://localhost:11434/api/generate"
-DEFAULT_MODEL = "llama3.2:1b"
-MAX_REPLIES_PER_RUN = 10
+STATE_FILE, OLLAMA_TAGS, OLLAMA_API = "replied_comments.json", "http://localhost:11434/api/tags", "http://localhost:11434/api/generate"
+HUMAN_ONLY = ["kahan rehte", "id do", "password", "collab", "number", "whatsapp", "pesa", "paid", "promotion", "meetup", "buy", "sell", "sponsor", "real name", "kon ho"]
 
-HUMAN_ONLY_KEYWORDS = [
-    "kahan rehte", "id do", "password", "collab", "collaboration",
-    "number", "whatsapp", "pesa", "paid", "promotion", "meetup",
-    "account de do", "buy", "sell", "contact", "sponsor", "real name",
-    "kahan se ho", "voice over", "kon ho"
-]
-
-def get_youtube_service():
-    token_pickle = os.environ.get("YOUTUBE_TOKEN_PICKLE")
-    if not token_pickle:
-        raise ValueError("YOUTUBE_TOKEN_PICKLE secret nahi mila!")
-    creds = pickle.loads(base64.b64decode(token_pickle.strip()))
-    if creds.expired and creds.refresh_token:
-        creds.refresh(Request())
+def get_yt():
+    tp = os.environ.get("YOUTUBE_TOKEN_PICKLE")
+    if not tp: raise ValueError("YOUTUBE_TOKEN_PICKLE missing!")
+    creds = pickle.loads(base64.b64decode(tp.strip()))
+    if creds.expired and creds.refresh_token: creds.refresh(Request())
     return build("youtube", "v3", credentials=creds)
 
-def get_active_ollama_model():
-    for attempt in range(2):
+def get_model():
+    for att in range(2):
         try:
-            with urllib.request.urlopen(OLLAMA_TAGS_URL, timeout=5) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
-                models = [m.get("name", "") for m in data.get("models", []) if m.get("name")]
-                if DEFAULT_MODEL in models:
-                    return DEFAULT_MODEL
-                if models:
-                    return models[0]
+            ms = [m.get("name", "") for m in json.loads(urllib.request.urlopen(OLLAMA_TAGS, timeout=5).read()).get("models", [])]
+            return next((x for x in ms if "llama3.2:1b" in x), ms[0] if ms else None)
         except Exception:
-            if attempt == 0:
-                try:
-                    subprocess.Popen(["ollama", "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                    time.sleep(3)
-                except Exception:
-                    break
+            if att == 0:
+                subprocess.Popen(["ollama", "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL); time.sleep(3)
     return None
 
-def load_replied_ids():
-    if os.path.exists(STATE_FILE):
-        try:
-            with open(STATE_FILE, "r", encoding="utf-8") as f:
-                return set(json.load(f))
-        except Exception:
-            pass
-    return set()
-
-def save_replied_ids(replied_set):
-    with open(STATE_FILE, "w", encoding="utf-8") as f:
-        json.dump(list(replied_set)[-500:], f, indent=2)
-
-def get_recent_videos(youtube):
-    ch_res = youtube.channels().list(mine=True, part="id,contentDetails").execute()
-    items = ch_res.get("items", [])
-    if not items:
-        return None, []
-    my_channel_id = items[0]["id"]
-    uploads_id = items[0]["contentDetails"]["relatedPlaylists"]["uploads"]
-    pl_items = youtube.playlistItems().list(
-        playlistId=uploads_id, part="snippet", maxResults=5
-    ).execute().get("items", [])
-    videos = []
-    for it in pl_items:
-        vid = it["snippet"]["resourceId"]["videoId"]
-        title = it["snippet"].get("title", "")
-        videos.append((vid, title))
-    return my_channel_id, videos
-
-def is_human_only_question(text):
-    lower = text.lower()
-    if any(kw in lower for kw in HUMAN_ONLY_KEYWORDS):
-        return True
-    if re.search(r"\b\d{10,12}\b", lower) or "@" in lower:
-        return True
-    return False
-
-def already_replied_by_owner(thread, my_channel_id):
-    replies = thread.get("replies", {}).get("comments", [])
-    for r in replies:
-        ch = r.get("snippet", {}).get("authorChannelId", {}).get("value")
-        if ch == my_channel_id:
-            return True
-    return False
-
-def generate_cognitive_reply(comment_text, model_name):
-    if not model_name:
-        return None
+def gen_reply(txt, model):
+    if not model: return None
     prompt = (
-        "[SYSTEM: DEVIL-999, ultra-skilled Free Fire mobile player]\n"
-        "Tone: Chill, confident, sharp, humble to fans, cold to haters.\n"
-        "RULES:\n"
-        "1. NEVER accept custom rooms or 1v1 challenges.\n"
-        "2. NEVER promise to upload a video or say 'kal video aayegi'.\n"
-        "3. Reply STRICTLY in under 12 words in natural Roman Urdu / English.\n\n"
-        f"Viewer Comment: {comment_text}\n"
-        "DEVIL Reply:"
+        "You are DEVIL-999, pro Free Fire player. Reply in <=10 words (Roman Urdu/English). Never promise 1v1 or uploads.\n"
+        "Examples:\nViewer: ♥♥♥♥♥\nDEVIL: Dil se shukriya bhai, love you!\n"
+        "Viewer: Nice accuracy bro\nDEVIL: Thanks bro, roz training ground ka kamaal hai!\n"
+        "Viewer: Hacker hai yeh\nDEVIL: 0.25x par aim drag check kar lo bro!\n"
+        f"Viewer: {txt}\nDEVIL:"
     )
-    payload = {
-        "model": model_name,
-        "prompt": prompt,
-        "stream": False,
-        "options": {"temperature": 0.7, "num_predict": 40}
-    }
+    pay = {"model": model, "prompt": prompt, "stream": False, "options": {"temperature": 0.65, "num_predict": 35}}
     try:
-        data = json.dumps(payload).encode("utf-8")
-        req = urllib.request.Request(OLLAMA_API_URL, data=data, headers={"Content-Type": "application/json"})
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            res = json.loads(resp.read().decode("utf-8"))
-            reply = res.get("response", "").strip().replace('"', "").splitlines()[0]
-            if not reply or any(w in reply.lower() for w in ["custom", "1v1", "kal video", "upload"]):
-                return None
-            return reply[:180]
-    except Exception as e:
-        print(f" -> [!] Ollama reply error: {e}")
+        req = urllib.request.Request(OLLAMA_API, data=json.dumps(pay).encode(), headers={"Content-Type": "application/json"})
+        r = json.loads(urllib.request.urlopen(req, timeout=30).read()).get("response", "").strip().replace('"', "").splitlines()[0]
+        return None if (not r or any(w in r.lower() for w in ("custom", "1v1", "kal video", "upload"))) else r[:160]
+    except Exception:
         return None
 
 def run_comment_engine():
     print("\n==========================================")
-    print("[*] PHASE 4: COGNITIVE LIVE ENGAGEMENT BOT")
+    print("[*] AGENT 6: PRO GAMER COMMENT BOT")
     print("==========================================")
+    yt = get_yt()
+    ch = yt.channels().list(mine=True, part="id,contentDetails").execute().get("items", [])
+    if not ch: return
+    my_id, up_id = ch[0]["id"], ch[0]["contentDetails"]["relatedPlaylists"]["uploads"]
+    pls = yt.playlistItems().list(playlistId=up_id, part="snippet", maxResults=6).execute().get("items", [])
+    replied = set(json.load(open(STATE_FILE))) if os.path.exists(STATE_FILE) else set()
+    model, posted, units = get_model(), 0, 2
 
-    youtube = get_youtube_service()
-    my_channel_id, videos = get_recent_videos(youtube)
-    if not my_channel_id or not videos:
-        print("[!] Channel ya uploaded videos nahi mili, bot safely exit kar raha hai.")
-        return
-
-    model_name = get_active_ollama_model()
-    print(f"[*] Active Ollama Model: {model_name or 'Unavailable'}")
-    replied_set = load_replied_ids()
-    replies_posted = 0
-    used_units = 2
-
-    for video_id, title in videos:
-        if replies_posted >= MAX_REPLIES_PER_RUN:
-            break
-        print(f"[*] Checking comments on: {title} ({video_id})")
+    for it in pls:
+        if posted >= 10: break
+        vid, ttl = it["snippet"]["resourceId"]["videoId"], it["snippet"].get("title", "")
+        if ttl in ("Deleted video", "Private video"): continue
         try:
-            threads = youtube.commentThreads().list(
-                part="snippet,replies",
-                videoId=video_id,
-                maxResults=20,
-                textFormat="plainText"
-            ).execute().get("items", [])
-            used_units += 1
-        except HttpError as e:
-            print(f" -> [!] Skipping video ({video_id}): {e}")
+            threads = yt.commentThreads().list(part="snippet,replies", videoId=vid, maxResults=20, textFormat="plainText").execute().get("items", [])
+            units += 1
+        except HttpError:
             continue
-
-        for thread in threads:
-            if replies_posted >= MAX_REPLIES_PER_RUN:
-                break
-            top_obj = thread["snippet"]["topLevelComment"]
-            comment_id = top_obj["id"]
-            top = top_obj["snippet"]
-            author = top.get("authorDisplayName", "Viewer")
-            author_ch = top.get("authorChannelId", {}).get("value")
-            text = top.get("textOriginal", "")
-
-            if comment_id in replied_set or author_ch == my_channel_id:
-                continue
-            if already_replied_by_owner(thread, my_channel_id):
-                replied_set.add(comment_id)
-                continue
-
-            print(f"\n[Viewer] {author}: '{text}'")
-            if is_human_only_question(text):
-                print(" -> [HUMAN ONLY] Personal/collab sawaal hai, AI reply skip kiya.")
-                replied_set.add(comment_id)
-                continue
-
-            ai_reply = generate_cognitive_reply(text, model_name)
-            if not ai_reply:
-                print(" -> [!] Reply generate nahi ho saka, skip kar rahe hain.")
-                continue
-
-            print(f" -> [DEVIL-999]: '{ai_reply}'")
+        for th in threads:
+            if posted >= 10: break
+            top = th["snippet"]["topLevelComment"]
+            cid, sn = top["id"], top["snippet"]
+            txt = sn.get("textOriginal", "")
+            if cid in replied or sn.get("authorChannelId", {}).get("value") == my_id: continue
+            if any(r.get("snippet", {}).get("authorChannelId", {}).get("value") == my_id for r in th.get("replies", {}).get("comments", [])):
+                replied.add(cid); continue
+            if any(k in txt.lower() for k in HUMAN_ONLY) or re.search(r"\b\d{10,12}\b", txt) or "@" in txt:
+                replied.add(cid); continue
+            rep = gen_reply(txt, model)
+            if not rep: continue
             try:
-                youtube.comments().insert(
-                    part="snippet",
-                    body={"snippet": {"parentId": comment_id, "textOriginal": ai_reply}}
-                ).execute()
-                replies_posted += 1
-                used_units += 50
-                replied_set.add(comment_id)
-                print(" -> [SUCCESS] Reply published!")
+                yt.comments().insert(part="snippet", body={"snippet": {"parentId": cid, "textOriginal": rep}}).execute()
+                posted += 1; units += 50; replied.add(cid)
+                print(f"[+] Replied on {vid}: '{txt}' -> '{rep}'")
             except Exception as e:
-                print(f" -> [!] Could not post reply: {e}")
+                print(f"[!] Reply fail: {e}")
+            time.sleep(random.uniform(4.0, 8.0))
 
-            time.sleep(random.uniform(4.0, 9.0))
-
-    save_replied_ids(replied_set)
-    record_quota_usage(units=used_units)
-    print(f"\n[+] PHASE 4 COMPLETE! Replies posted: {replies_posted} | Quota: {used_units}\n")
+    json.dump(list(replied)[-500:], open(STATE_FILE, "w"))
+    record_quota_usage(units=units)
+    print(f"[+] Agent 6 Complete! Replies: {posted} | Quota: {units}\n")
 
 if __name__ == "__main__":
     run_comment_engine()
