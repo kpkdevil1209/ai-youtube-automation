@@ -1,292 +1,460 @@
-# generate_script.py - Agent 3: Trend-Driven Hook & Loop Script + Verified Gameplay
-import os, re, json, time, base64, pickle, socket, shutil, random, subprocess, requests, yt_dlp
-from niche_brain import scout_live_viral_trend, save_history_entry, load_history
-from verify_freefire_agent import verify_freefire_video, is_metadata_clean
+import os
+import re
+import json
+import time
+import socket
+import random
+import subprocess
+import urllib.parse
+import requests
+import verify_freefire_agent as vfa
 
-try:
-    from viral_trend_agent import scout_today_viral_topic
-except Exception:
-    scout_today_viral_topic = None
+OLLAMA_URL = "http://127.0.0.1:11434/api/generate"
+TEXT_MODEL = "llama3.2:1b"
+TWITCH_GQL = "https://gql.twitch.tv/gql"
+TWITCH_CID = "kimne78kx3ncx6brgo4mv6wki5h1ko"
+UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126.0.0.0 Safari/537.36"
 
-UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
-BANNED = {"devil", "insanity", "999", "devil999", "investigation", "enigma", "mystery", "documentary", "story", "analysis", "exposed", "truth", "panel", "vs", "pure", "skill", "reflex", "hindi", "urdu", "shorts", "short", "viral", "video", "youtube", "channel"}
-SHORT_Q = ["free fire one tap headshot gameplay", "free fire awm sniper highlights", "free fire m1887 two shot clutch", "free fire desert eagle headshot", "free fire cs rank headshot montage", "garena free fire pro movement gameplay"]
-LONG_Q = ["free fire full gameplay 60fps", "free fire grandmaster rank push gameplay", "free fire solo vs squad full match", "free fire clash squad ranked gameplay"]
+RAW_GAMEPLAY_QUERIES = [
+    "free fire one tap headshot gameplay",
+    "free fire 1v4 clutch squad wipe",
+    "free fire desert eagle headshot montage",
+    "free fire m1887 two shot clutch",
+    "free fire cs rank grandmaster gameplay",
+    "garena free fire pro movement gameplay",
+]
 
-SCENE_ITEM = {"type": "object", "properties": {"time": {"type": "number"}, "narration": {"type": "string"}, "english_subtitle": {"type": "string"}, "focus_cue": {"type": "string"}}, "required": ["time", "narration", "english_subtitle", "focus_cue"]}
-META_SCHEMA = {"type": "object", "properties": {"title": {"type": "string"}, "description": {"type": "string"}, "tags": {"type": "array", "items": {"type": "string"}}, "pinned_comment": {"type": "string"}}, "required": ["title", "description", "tags", "pinned_comment"]}
-SCENES_SCHEMA = {"type": "object", "properties": {"scenes": {"type": "array", "items": SCENE_ITEM}}, "required": ["scenes"]}
-SCRIPT_SCHEMA = {"type": "object", "properties": {**META_SCHEMA["properties"], "scenes": {"type": "array", "items": SCENE_ITEM}}, "required": ["title", "description", "tags", "pinned_comment", "scenes"]}
+BANNED_WORDS = [
+    "pubg", "bgmi", "cod", "call of duty", "fortnite", "valorant",
+    "minecraft", "gta", "roblox", "free fire live stream giveaway",
+    "redeem code giveaway", "how to download mod apk",
+]
 
-def warp_proxy():
+THEMES = ["CRIMSON", "CYBER", "GOLDEN", "ICE"]
+
+
+def warp_proxy_url():
     try:
-        with socket.create_connection(("127.0.0.1", 1080), timeout=1):
+        with socket.create_connection(("127.0.0.1", 1080), timeout=1.5):
             return "socks5://127.0.0.1:1080"
     except Exception:
         return None
 
-def clean_query(raw_q, weapon):
-    q = re.sub(r"[\[\]\(\)\{\}_\-|/:#@\"',.?!]+", " ", str(raw_q or "").split(",")[0].lower())
-    words = [w for w in q.split() if len(w) > 1 and w not in BANNED][:6]
-    c = " ".join(words).strip()
-    if c and "free fire" not in c and "garena" not in c:
-        c = f"free fire {c}"
-    return c if len(c.split()) >= 3 else f"free fire {weapon} headshot highlights"
 
-def build_queries(raw_q, weapon, is_short=True):
-    pool = list(SHORT_Q if is_short else LONG_Q)
-    random.shuffle(pool)
-    out = []
-    for item in [clean_query(raw_q, weapon), f"free fire {str(weapon or 'awm').lower()} headshot gameplay"] + pool:
-        if item and item not in out:
-            out.append(item)
-    return out[:6]
+def safe_title_ok(title):
+    t = (title or "").lower()
+    if any(b in t for b in BANNED_WORDS):
+        return False
+    ff_hints = ["free fire", "freefire", "ff", "booyah", "headshot", "onetap", "one tap", "m1887", "desert eagle", "cs rank", "garena", "alok", "kelly", "ruok", "raistar", "b2k"]
+    return any(h in t for h in ff_hints)
 
-def ensure_ollama():
-    base = os.environ.get("OLLAMA_URL", "http://localhost:11434").split("/api/")[0].rstrip("/")
-    gm = lambda: [m["name"] for m in requests.get(f"{base}/api/tags", timeout=3).json().get("models", []) if m.get("name")]
-    try:
-        return base, gm()
-    except Exception:
-        pass
-    if not shutil.which("ollama"):
-        subprocess.run("curl -fsSL https://ollama.com/install.sh | sh", shell=True, check=True)
-    subprocess.Popen(["ollama", "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    for _ in range(15):
-        time.sleep(1.5)
+
+def load_trend_brief():
+    if os.path.exists("viral_topic_brief.json"):
         try:
-            return base, gm()
-        except Exception:
-            pass
-    raise RuntimeError("FATAL: Ollama failed to start.")
-
-def call_ollama_schema(prompt, schema, max_tokens=2048, raise_on_fail=True):
-    base, models = ensure_ollama()
-    model = next((m for m in models if "llama3.2:1b" in m), next((m for m in models if "vl" not in m and "moondream" not in m), "llama3.2:1b"))
-    if not any(model == m for m in models):
-        subprocess.run(["ollama", "pull", model], check=True)
-    payload = {"model": model, "messages": [{"role": "system", "content": "Output valid compact JSON matching schema. Concise strings, no raw newlines."}, {"role": "user", "content": prompt}], "format": schema, "stream": False, "keep_alive": "10m", "options": {"temperature": 0.4, "repeat_penalty": 1.1, "num_ctx": 4096, "num_predict": max_tokens, "num_thread": os.cpu_count() or 2}}
-    for att in range(1, 3):
-        try:
-            print(f"[*] Calling Ollama ({model}) [Attempt {att}/2]...")
-            r = requests.post(f"{base}/api/chat", json=payload, timeout=140)
-            if r.status_code != 200:
-                raise RuntimeError(f"HTTP {r.status_code}")
-            txt = re.sub(r"^```(?:json)?\s*|\s*```$", "", r.json().get("message", {}).get("content", "").strip()).strip()
-            data = json.loads(txt)
-            if all(k in data and data[k] for k in schema["required"]):
+            with open("viral_topic_brief.json", "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if data.get("topic"):
                 return data
         except Exception as e:
-            print(f"[!] Ollama attempt {att}: {e}")
-            time.sleep(1.5)
-    if raise_on_fail:
-        raise RuntimeError("FATAL: AI structured output failed.")
-    return None
-
-def top_channel_winner():
-    tp = os.environ.get("YOUTUBE_TOKEN_PICKLE")
-    if not tp:
-        return ""
+            print(f"[!] Trend brief read warning: {e}")
     try:
-        from googleapiclient.discovery import build
-        yt = build("youtube", "v3", credentials=pickle.loads(base64.b64decode(tp.strip())))
-        up = yt.channels().list(mine=True, part="contentDetails").execute()["items"][0]["contentDetails"]["relatedPlaylists"]["uploads"]
-        ids = [i["snippet"]["resourceId"]["videoId"] for i in yt.playlistItems().list(playlistId=up, part="snippet", maxResults=8).execute().get("items", [])]
-        vids = yt.videos().list(id=",".join(ids), part="snippet,statistics").execute().get("items", []) if ids else []
-        best = max(vids, key=lambda v: int(v.get("statistics", {}).get("viewCount", 0)), default=None)
-        if best and any(w in best["snippet"]["title"].lower() for w in ("free fire", "desert eagle", "m1887", "awm", "headshot", "1v4", "devil")):
-            return f" | Winning Style: '{best['snippet']['title']}' ({best['statistics'].get('viewCount', 0)} views)"
-    except Exception:
-        pass
-    return ""
+        import viral_trend_agent
+        return viral_trend_agent.scout_today_viral_topic()
+    except Exception as e:
+        print(f"[!] Viral trend fallback: {e}")
+    return {
+        "topic": "FREE FIRE SECRET ONE TAP HEADSHOT TRICK PRO PLAYERS HIDE",
+        "format": "Detective Breakdown",
+        "hook": "99% Free Fire players yeh aik setting ghalat rakhte hain!",
+        "weapon": "Desert Eagle",
+        "score": 850,
+    }
 
-def get_dur(p):
+
+def check_and_finalize(cand_path, title):
+    if not os.path.exists(cand_path) or os.path.getsize(cand_path) < 300000:
+        if os.path.exists(cand_path):
+            os.remove(cand_path)
+        return False
+
     try:
-        return float(subprocess.check_output(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", p], text=True, timeout=15).strip())
-    except Exception:
-        return 0.0
+        res = vfa.verify_freefire_video(cand_path, title)
+    except TypeError:
+        res = vfa.verify_freefire_video(cand_path)
 
-def valid_mp4(p, min_s=12.0):
-    return os.path.exists(p) and os.path.getsize(p) >= 350000 and get_dur(p) >= min_s
+    if isinstance(res, tuple):
+        ok, reason = bool(res[0]), str(res[1])
+    else:
+        ok, reason = bool(res), "vision/quality check"
 
-def clean_tmp():
-    if os.path.exists("raw_gameplay.mp4"):
-        os.remove("raw_gameplay.mp4")
+    if not ok:
+        print(f"[-] Rejected candidate ({reason}): {title[:55]}")
+        if os.path.exists(cand_path):
+            os.remove(cand_path)
+        return False
 
-def accept_clip(cid, title, used, t_dur, trusted=False):
-    ok, reason = verify_freefire_video("raw_gameplay.mp4", source_title=title, trusted_category=trusted, remove_on_fail=True, target_dur=t_dur)
-    if ok:
-        return cid
-    print(f"[Agent 2 Rejected] {cid}: {reason}")
-    used.add(cid)
-    return None
-
-def fetch_stream(url, hdr=None):
-    clean_tmp()
+    print(f"[+] VERIFIED FREE FIRE CLIP: {title[:60]}")
     try:
-        with requests.get(url, headers={"User-Agent": UA, **(hdr or {})}, stream=True, timeout=35) as r:
-            if r.status_code < 400:
-                with open("raw_gameplay.mp4", "wb") as f:
-                    for c in r.iter_content(524288):
-                        if c:
-                            f.write(c)
-                if valid_mp4("raw_gameplay.mp4"):
+        if hasattr(vfa, "crop_action_peak"):
+            vfa.crop_action_peak(cand_path, "raw_gameplay.mp4", 35)
+        else:
+            os.replace(cand_path, "raw_gameplay.mp4")
+    except Exception as e:
+        print(f"[!] Peak crop warning ({e}), using verified clip directly")
+        os.replace(cand_path, "raw_gameplay.mp4")
+
+    if os.path.exists(cand_path) and os.path.exists("raw_gameplay.mp4"):
+        try:
+            os.remove(cand_path)
+        except Exception:
+            pass
+    return os.path.exists("raw_gameplay.mp4") and os.path.getsize("raw_gameplay.mp4") > 200000
+
+
+def ytdlp_download(url, out_path, proxy=None, is_yt=False):
+    if os.path.exists(out_path):
+        os.remove(out_path)
+    cmd = [
+        "yt-dlp",
+        "--no-playlist",
+        "--max-filesize", "85M",
+        "--socket-timeout", "20",
+        "--retries", "2",
+        "-f", "bestvideo[height>=360][height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height>=360][ext=mp4]/best",
+        "--merge-output-format", "mp4",
+        "-o", out_path,
+    ]
+    if is_yt:
+        cmd += ["--js-runtimes", "deno", "--extractor-args", "youtube:player_client=web_creator,tv"]
+    if proxy:
+        cmd += ["--proxy", proxy]
+    cmd.append(url)
+    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=110)
+    if proc.returncode != 0:
+        err = (proc.stderr or proc.stdout or "").strip().splitlines()
+        last_err = err[-1] if err else "unknown error"
+        print(f"    [yt-dlp skip] {last_err[:120]}")
+        return False
+    return os.path.exists(out_path) and os.path.getsize(out_path) > 300000
+
+
+def direct_mp4_download(mp4_url, out_path):
+    if os.path.exists(out_path):
+        os.remove(out_path)
+    try:
+        with requests.get(mp4_url, headers={"User-Agent": UA}, stream=True, timeout=35) as r:
+            if r.status_code != 200:
+                return False
+            total = 0
+            with open(out_path, "wb") as f:
+                for chunk in r.iter_content(chunk_size=131072):
+                    if chunk:
+                        f.write(chunk)
+                        total += len(chunk)
+                        if total > 80 * 1024 * 1024:
+                            break
+        return os.path.exists(out_path) and os.path.getsize(out_path) > 300000
+    except Exception as e:
+        print(f"    [direct dl error] {str(e)[:90]}")
+        return False
+
+
+def harvest_twitch():
+    print("[*] [Tier 1 - Twitch Free Fire (ID 502732)] Fetching clips...")
+    gql_query = """
+    query($gameID: ID!, $limit: Int!, $filter: ClipsPeriod!) {
+      game(id: $gameID) {
+        clips(first: $limit, criteria: { period: $filter }) {
+          edges {
+            node {
+              slug
+              title
+              url
+              durationSeconds
+              viewCount
+            }
+          }
+        }
+      }
+    }
+    """.replace('"""', '')
+    clean_q = "query($gameID: ID!, $limit: Int!, $filter: ClipsPeriod!) { game(id: $gameID) { clips(first: $limit, criteria: { period: $filter }) { edges { node { slug title url durationSeconds viewCount } } } } }"
+    headers = {"Client-Id": TWITCH_CID, "Content-Type": "application/json", "User-Agent": UA}
+    for period in ["LAST_DAY", "LAST_WEEK", "LAST_MONTH", "ALL_TIME"]:
+        try:
+            payload = {"query": clean_q, "variables": {"gameID": "502732", "limit": 15, "filter": period}}
+            r = requests.post(TWITCH_GQL, json=payload, headers=headers, timeout=15)
+            data = r.json()
+            edges = (data.get("data") or {}).get("game", {}).get("clips", {}).get("edges", [])
+            print(f"    [Twitch {period}] Found {len(edges)} clips")
+            random.shuffle(edges)
+            for edge in edges:
+                node = edge.get("node") or {}
+                dur = node.get("durationSeconds") or 0
+                title = node.get("title") or "Free Fire Twitch Clip"
+                clip_url = node.get("url") or f"https://clips.twitch.tv/{node.get('slug')}"
+                if dur < 12 or dur > 180:
+                    continue
+                if ytdlp_download(clip_url, "cand_twitch.mp4"):
+                    if check_and_finalize("cand_twitch.mp4", f"Free Fire {title}"):
+                        return True
+        except Exception as e:
+            print(f"    [Twitch {period} error] {e}")
+    return False
+
+
+def harvest_tiktok(queries):
+    print("[*] [Tier 2 - TikTok HD via TikWM API] Searching...")
+    for q in queries:
+        try:
+            r = requests.get(
+                "https://www.tikwm.com/api/feed/search",
+                params={"keywords": q, "count": 12, "cursor": 0},
+                headers={"User-Agent": UA},
+                timeout=15,
+            )
+            res = r.json()
+            videos = (res.get("data") or {}).get("videos") or []
+            print(f"    [TikWM '{q[:28]}'] Returned {len(videos)} videos")
+            random.shuffle(videos)
+            for v in videos[:6]:
+                dur = int(v.get("duration") or 0)
+                title = v.get("title") or q
+                if dur < 12 or dur > 180 or not safe_title_ok(title + " " + q):
+                    continue
+                mp4_url = v.get("hdplay") or v.get("play")
+                if mp4_url and direct_mp4_download(mp4_url, "cand_tt.mp4"):
+                    if check_and_finalize("cand_tt.mp4", title):
+                        return True
+                vid_id = v.get("video_id") or v.get("id")
+                author = (v.get("author") or {}).get("unique_id")
+                if vid_id and author:
+                    tt_url = f"https://www.tiktok.com/@{author}/video/{vid_id}"
+                    if ytdlp_download(tt_url, "cand_tt.mp4"):
+                        if check_and_finalize("cand_tt.mp4", title):
+                            return True
+        except Exception as e:
+            print(f"    [TikWM error] {str(e)[:90]}")
+    return False
+
+
+def harvest_dailymotion(queries):
+    print("[*] [Tier 3 - Dailymotion Gaming API] Searching...")
+    for q in queries[:4]:
+        try:
+            r = requests.get(
+                "https://api.dailymotion.com/videos",
+                params={
+                    "channel": "videogames",
+                    "search": q,
+                    "sort": "visited",
+                    "limit": 10,
+                    "fields": "id,title,url,duration",
+                },
+                headers={"User-Agent": UA},
+                timeout=15,
+            )
+            items = r.json().get("list") or []
+            print(f"    [Dailymotion '{q[:28]}'] Returned {len(items)} items")
+            for item in items[:5]:
+                dur = int(item.get("duration") or 0)
+                title = item.get("title") or ""
+                v_url = item.get("url")
+                if dur < 14 or dur > 420 or not v_url or not safe_title_ok(title):
+                    continue
+                if ytdlp_download(v_url, "cand_dm.mp4"):
+                    if check_and_finalize("cand_dm.mp4", title):
+                        return True
+        except Exception as e:
+            print(f"    [Dailymotion error] {str(e)[:90]}")
+    return False
+
+
+def harvest_youtube_and_piped(queries, proxy):
+    print(f"[*] [Tier 4 - YouTube + Piped] Proxy: {'WARP' if proxy else 'Direct'}...")
+    for q in queries[:3]:
+        try:
+            cmd = [
+                "yt-dlp",
+                "--flat-playlist",
+                "--dump-single-json",
+                "--js-runtimes", "deno",
+            ]
+            if proxy:
+                cmd += ["--proxy", proxy]
+            cmd.append(f"ytsearch6:{q}")
+            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=35)
+            if proc.returncode == 0 and proc.stdout.strip():
+                entries = json.loads(proc.stdout).get("entries") or []
+                print(f"    [YT Search '{q[:26]}'] Found {len(entries)} entries")
+                for e in entries[:4]:
+                    dur = int(e.get("duration") or 0)
+                    title = e.get("title") or ""
+                    vid = e.get("id")
+                    if not vid or dur < 14 or dur > 420 or not safe_title_ok(title):
+                        continue
+                    v_url = f"https://www.youtube.com/watch?v={vid}"
+                    if ytdlp_download(v_url, "cand_yt.mp4", proxy=proxy, is_yt=True):
+                        if check_and_finalize("cand_yt.mp4", title):
+                            return True
+        except Exception as e:
+            print(f"    [YT search error] {str(e)[:90]}")
+
+    piped_hosts = [
+        "https://pipedapi.kavin.rocks",
+        "https://api.piped.private.coffee",
+        "https://pipedapi.adminforge.de",
+    ]
+    for host in piped_hosts:
+        for q in queries[:2]:
+            try:
+                r = requests.get(f"{host}/search", params={"q": q, "filter": "videos"}, timeout=12)
+                if r.status_code != 200:
+                    continue
+                items = r.json().get("items") or []
+                print(f"    [Piped {host}] Found {len(items)} items")
+                for item in items[:4]:
+                    dur = int(item.get("duration") or 0)
+                    title = item.get("title") or ""
+                    u = item.get("url") or ""
+                    if dur < 14 or dur > 420 or "v=" not in u or not safe_title_ok(title):
+                        continue
+                    vid = u.split("v=")[-1].split("&")[0]
+                    sr = requests.get(f"{host}/streams/{vid}", timeout=12).json()
+                    streams = [s for s in (sr.get("videoStreams") or []) if not s.get("videoOnly") and s.get("url")]
+                    if streams and direct_mp4_download(streams[0]["url"], "cand_piped.mp4"):
+                        if check_and_finalize("cand_piped.mp4", title):
+                            return True
+            except Exception as e:
+                print(f"    [Piped skip] {str(e)[:80]}")
+    return False
+
+
+def harvest_rumble_and_archive(queries):
+    print("[*] [Tier 5 - Rumble & Archive.org] Searching...")
+    for q in queries[:2]:
+        try:
+            url = f"https://rumble.com/search/video?q={urllib.parse.quote_plus(q)}"
+            proc = subprocess.run(
+                ["yt-dlp", "--flat-playlist", "--dump-single-json", "--playlist-items", "1:5", url],
+                capture_output=True, text=True, timeout=30
+            )
+            if proc.returncode == 0 and proc.stdout.strip():
+                entries = json.loads(proc.stdout).get("entries") or []
+                print(f"    [Rumble '{q[:24]}'] Found {len(entries)} items")
+                for e in entries[:4]:
+                    v_url = e.get("webpage_url") or e.get("url")
+                    title = e.get("title") or ""
+                    if v_url and safe_title_ok(title):
+                        if ytdlp_download(v_url, "cand_rumble.mp4"):
+                            if check_and_finalize("cand_rumble.mp4", title):
+                                return True
+        except Exception as e:
+            print(f"    [Rumble skip] {str(e)[:80]}")
+
+    try:
+        r = requests.get(
+            "https://archive.org/advancedsearch.php",
+            params={"q": 'title:("free fire") AND mediatype:(movies)', "fl[]": "identifier,title", "output": "json", "rows": 8},
+            timeout=15,
+        )
+        docs = (r.json().get("response") or {}).get("docs") or []
+        print(f"    [Archive.org] Found {len(docs)} items")
+        for d in docs[:4]:
+            title = str(d.get("title") or "Free Fire Gameplay")
+            if safe_title_ok(title) and ytdlp_download(f"https://archive.org/details/{d['identifier']}", "cand_arch.mp4"):
+                if check_and_finalize("cand_arch.mp4", title):
                     return True
-    except Exception:
-        pass
-    clean_tmp()
+    except Exception as e:
+        print(f"    [Archive skip] {str(e)[:80]}")
     return False
 
-def ytdl_get(url, extra=None):
-    clean_tmp()
-    opts = {"format": "bv*[height<=1080][ext=mp4]+ba[ext=m4a]/best[height<=1080][ext=mp4]/best", "outtmpl": "raw_gameplay.mp4", "merge_output_format": "mp4", "overwrites": True, "quiet": True, **(extra or {})}
-    try:
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            ydl.download([url])
-        if valid_mp4("raw_gameplay.mp4"):
-            return True
-    except Exception:
-        pass
-    clean_tmp()
-    return False
 
-def dl_twitch(used, min_d, max_d, t_dur):
-    print("[*] [Tier 1 - Twitch Garena Free Fire] Checking...")
-    hdr = {"Client-Id": "kimne78kx3ncx6brgo4mv6wki5h1ko", "Content-Type": "application/json", "User-Agent": UA}
-    qs = "query($s: ID!, $l: Int, $c: GameClipsInput){game(slug:$s){clips(first:$l,criteria:$c){edges{node{slug title durationSeconds url}}}}}"
-    for flt in ("LAST_DAY", "LAST_WEEK", "LAST_MONTH", "ALL_TIME"):
-        try:
-            r = requests.post("https://gql.twitch.tv/gql", headers=hdr, json={"query": qs, "variables": {"s": "garena-free-fire", "l": 25, "c": {"filter": flt}}}, timeout=12)
-            for e in ((((r.json() or {}).get("data") or {}).get("game") or {}).get("clips") or {}).get("edges") or []:
-                n = e.get("node") or {}
-                sl, ttl, dur = n.get("slug") or "", n.get("title") or "", int(n.get("durationSeconds") or 0)
-                cid = f"tw_{sl}"
-                if sl and cid not in used and (dur == 0 or min_d <= dur <= max_d) and is_metadata_clean(ttl, trusted=True)[0]:
-                    if ytdl_get(n.get("url") or f"https://clips.twitch.tv/{sl}") and accept_clip(cid, ttl, used, t_dur, trusted=True):
-                        return cid
-        except Exception:
-            pass
-    return None
+def harvest_raw_gameplay(brief):
+    queries = list(RAW_GAMEPLAY_QUERIES)
+    weapon = (brief.get("weapon") or "").strip()
+    if weapon and len(weapon) <= 18 and weapon.lower() not in ["none", "general", "event"]:
+        queries.insert(0, f"free fire {weapon.lower()} headshot gameplay")
+    random.shuffle(queries[1:])
 
-def dl_tt(q, used, min_d, max_d, t_dur):
-    print(f"[*] [Tier 2 - TikTok HD] Searching: '{q}'...")
-    time.sleep(2.2)
-    hdr, pay = {"User-Agent": UA, "Referer": "https://www.tikwm.com/", "Origin": "https://www.tikwm.com"}, {"keywords": q, "count": 15, "cursor": 0, "hd": 1}
-    for post in (True, False):
-        try:
-            r = requests.post("https://www.tikwm.com/api/feed/search", data=pay, headers=hdr, timeout=15) if post else requests.get("https://www.tikwm.com/api/feed/search", params=pay, headers=hdr, timeout=15)
-            d = r.json().get("data") if r.status_code == 200 and r.json().get("code") == 0 else None
-            for v in (d.get("videos", []) if isinstance(d, dict) else (d if isinstance(d, list) else [])):
-                vid, ttl, dur = str(v.get("video_id") or v.get("id") or "").strip(), str(v.get("title") or ""), int(v.get("duration") or 0)
-                u = v.get("hdplay") or v.get("play") or ""
-                u = f"https://www.tikwm.com{u}" if u.startswith("/") else u
-                cid = f"tt_{vid}"
-                if vid and cid not in used and (dur == 0 or min_d <= dur <= max_d) and is_metadata_clean(ttl)[0] and u:
-                    if fetch_stream(u, {"Referer": "https://www.tikwm.com/"}) and accept_clip(cid, ttl, used, t_dur):
-                        return cid
-        except Exception:
-            time.sleep(2.0)
-    return None
+    proxy = warp_proxy_url()
+    if harvest_twitch():
+        return True
+    if harvest_tiktok(queries):
+        return True
+    if harvest_dailymotion(queries):
+        return True
+    if harvest_youtube_and_piped(queries, proxy):
+        return True
+    if harvest_rumble_and_archive(queries):
+        return True
+    raise RuntimeError(f"FATAL: No verified Free Fire raw gameplay found across all 5 tiers for {queries}")
 
-def dl_dm(q, used, min_d, max_d, t_dur):
-    print(f"[*] [Tier 3 - Dailymotion HD] Searching: '{q}'...")
-    for s in ("relevance", "visited"):
-        try:
-            r = requests.get("https://api.dailymotion.com/videos", params={"search": q, "fields": "id,title,duration,url", "sort": s, "limit": 15, "longer_than": int(min_d), "shorter_than": int(max_d)}, headers={"User-Agent": UA}, timeout=10)
-            for it in (r.json().get("list") or []) if r.status_code == 200 else []:
-                did, ttl, dur = f"dm_{it.get('id', '')}", it.get("title") or "", int(it.get("duration") or 0)
-                if did not in used and min_d <= dur <= max_d and is_metadata_clean(ttl)[0] and it.get("url"):
-                    if ytdl_get(it["url"]) and accept_clip(did, ttl, used, t_dur):
-                        return did
-        except Exception:
-            pass
-    return None
 
-def dl_inv_yt(q, used, min_d, max_d, t_dur):
-    print(f"[*] [Tier 4 - Invidious/YT] Checking: '{q}'...")
-    for node in ("https://inv.nadeko.net", "https://yewtu.be"):
+def write_script_with_ollama(brief):
+    topic = brief.get("topic", "FREE FIRE PRO SECRET")
+    fmt = brief.get("format", "Detective Breakdown")
+    hook = brief.get("hook", "99% Free Fire players yeh raaz nahi jante!")
+
+    prompt = (
+        f"You are DEVIL INSANITY, a viral Free Fire YouTube Shorts narrator speaking energetic Hinglish/Roman Urdu. "
+        f"Write a 28-second high-retention Short script about today's viral topic: '{topic}' in style '{fmt}'. "
+        f"Start immediately at 0.0s with this shock hook: '{hook}'. "
+        f"End with a loop line that connects right back to the hook. "
+        f"Return STRICT JSON with keys: "
+        f"title (max 85 chars English+Hindi hype with #shorts), "
+        f"description (2 lines + hashtags #freefire #freefiremax #shorts), "
+        f"tags (array of 8 strings), "
+        f"pinned_comment (1 engaging question in Roman Urdu for viewers), "
+        f"segments (array of 6 objects with keys: text (6-10 words Roman Urdu/English), pace ('fast' or 'normal' or 'slow'), sfx ('whoosh' or 'hit' or 'none'))."
+    )
+
+    for attempt in range(2):
         try:
-            r = requests.get(f"{node}/api/v1/search", params={"q": q, "type": "video"}, timeout=6)
-            for it in (r.json() if r.status_code == 200 else [])[:4]:
-                vid, ttl = it.get("videoId"), it.get("title") or ""
-                if vid and vid not in used and min_d <= int(it.get("lengthSeconds") or 0) <= max_d and is_metadata_clean(ttl)[0]:
-                    vr = requests.get(f"{node}/api/v1/videos/{vid}", timeout=6)
-                    for s in (vr.json().get("formatStreams") or []) if vr.status_code == 200 else []:
-                        if s.get("container") == "mp4" and s.get("url") and fetch_stream(s["url"]) and accept_clip(vid, ttl, used, t_dur):
-                            return vid
-        except Exception:
-            pass
-    px = warp_proxy()
-    ex = {"extractor_args": {"youtube": {"player_client": ["tv", "android_vr", "mweb"]}}, "sleep_requests": 1, **({"proxy": px} if px else {}), **({"cookiefile": "cookies.txt"} if os.path.exists("cookies.txt") else {})}
-    try:
-        with yt_dlp.YoutubeDL({"quiet": True, "extract_flat": True, **({"proxy": px} if px else {})}) as ydl:
-            cands = [(e["id"], e.get("title") or "") for e in ((ydl.extract_info(f"ytsearch5:{q}", download=False) or {}).get("entries") or []) if e.get("id") and e["id"] not in used and is_metadata_clean(e.get("title") or "")[0]]
-        for vid, ttl in cands[:3]:
-            if ytdl_get(f"https://www.youtube.com/watch?v={vid}", ex) and accept_clip(vid, ttl, used, t_dur):
-                return vid
-    except Exception:
-        pass
-    return None
+            r = requests.post(
+                OLLAMA_URL,
+                json={"model": TEXT_MODEL, "prompt": prompt, "stream": False, "format": "json"},
+                timeout=90,
+            )
+            raw = r.json().get("response", "").strip()
+            m = re.search(r"\{.*\}", raw, re.DOTALL)
+            parsed = json.loads(m.group(0) if m else raw)
+            segs = parsed.get("segments") or []
+            if len(segs) >= 3 and parsed.get("title"):
+                full_text = " ".join(s.get("text", "").strip() for s in segs if s.get("text"))
+                title = str(parsed["title"]).replace("<", "").replace(">", "").strip()[:95]
+                if "#shorts" not in title.lower():
+                    title = (title[:85] + " #shorts").strip()
+                return {
+                    "title": title,
+                    "description": str(parsed.get("description") or f"{topic}\n#freefire #freefiremax #shorts").replace("<", "").replace(">", ""),
+                    "tags": [str(t) for t in (parsed.get("tags") or ["free fire", "free fire max", "free fire shorts", "devil insanity"])[:12]],
+                    "pinned_comment": str(parsed.get("pinned_comment") or "Aap ka favorite gun konsa hai? Comment mein batao!"),
+                    "topic": topic,
+                    "format": fmt,
+                    "theme": random.choice(THEMES),
+                    "hook": hook,
+                    "segments": segs,
+                    "narration": full_text,
+                    "script": full_text,
+                }
+        except Exception as e:
+            print(f"[!] Ollama script retry {attempt+1}: {e}")
+            time.sleep(2)
+
+    raise RuntimeError("FATAL: Ollama failed to generate valid script JSON.")
+
 
 def generate_script():
-    plan = next((json.load(open(f, encoding="utf-8")) for f in ("daily_plan.json", "task_plan.json") if os.path.exists(f)), {})
-    fmt = plan.get("format_type", plan.get("type", "short"))
-    is_short = str(fmt).lower() != "long"
-    bp = scout_live_viral_trend(format_type=fmt)
-    bp["target_duration"] = float(plan.get("target_duration", random.uniform(26.0, 32.0) if is_short else 900.0))
-    t_dur = round(bp["target_duration"], 1)
-    used = set(load_history().get("video_ids", []))
-    win_hint = top_channel_winner()
+    brief = load_trend_brief()
+    print(f"[+] Trend Topic: {brief.get('topic')} | Format: {brief.get('format')}")
+    harvest_raw_gameplay(brief)
+    script_data = write_script_with_ollama(brief)
+    with open("current_script.json", "w", encoding="utf-8") as f:
+        json.dump(script_data, f, indent=2, ensure_ascii=False)
+    print(f"[+] Script & Raw Gameplay Ready! Title: {script_data['title']}")
 
-    trend = None
-    if scout_today_viral_topic:
-        try:
-            trend = scout_today_viral_topic(format_type=fmt)
-        except Exception as e:
-            print(f"[!] Agent 1 notice: {e}")
-
-    topic = trend["winning_topic"] if trend else bp["pillar_name"]
-    v_fmt = trend["viral_format"] if trend else "Detective Breakdown"
-    hook = trend["hook_line"] if trend else "1 HP par yeh impossible clutch kaise hua?!"
-    weapon = trend["weapon_focus"] if trend else bp["weapon"]
-    raw_q = trend["search_query"] if trend else f"free fire {weapon} headshot"
-    queries = build_queries(raw_q, weapon, is_short=is_short)
-    q, min_d, max_d = queries[0], *((15, 300) if is_short else (120, 1800))
-    print(f"[+] Trend Topic: {topic} | Format: {v_fmt} | Query: '{q}'")
-
-    vid = dl_twitch(used, 15, max_d, t_dur if is_short else None)
-    if not vid:
-        for cq in queries:
-            vid = (dl_tt(cq, used, 15, 240, t_dur if is_short else None) if is_short else None) or dl_dm(cq, used, min_d, max_d, t_dur if is_short else None)
-            if vid:
-                q = cq; break
-    if not vid:
-        for cq in queries[:3]:
-            vid = dl_inv_yt(cq, used, min_d, max_d, t_dur if is_short else None)
-            if vid:
-                q = cq; break
-    if not vid or not valid_mp4("raw_gameplay.mp4"):
-        raise RuntimeError(f"FATAL: No verified Free Fire clip found for {queries}.")
-
-    dur = get_dur("raw_gameplay.mp4")
-    times = [round(i * (t_dur / 7.0), 1) for i in range(7)]
-    base_p = (
-        f"Topic: '{topic}' | Format: {v_fmt} | Opening Hook: '{hook}' | Weapon: {weapon}{win_hint} | Clip: {dur:.1f}s -> {t_dur}s.\n"
-        "RULES: Scene 0 MUST open with the exact shocking hook (no greetings!). Scenes 1-5 build forensic/story suspense. Scene 6 MUST end mid-thought looping smoothly back to Scene 0!"
-    )
-    ai_s = call_ollama_schema(f"Write 7-scene Roman Urdu narration (9-13 words each, no emojis) + pure English subtitles for {base_p} | Timestamps: {times} | Max 5 tags, 1-line description.", SCRIPT_SCHEMA, max_tokens=2048, raise_on_fail=False)
-    if not ai_s:
-        ai_m = call_ollama_schema(f"YouTube title, 1-line description, max 5 tags, 1 Roman Urdu debate pinned_comment for {base_p}.", META_SCHEMA, max_tokens=600)
-        ai_sc = call_ollama_schema(f"EXACTLY 7 scenes timestamps {times}. Roman Urdu narration (9-13 words, no emojis), pure English english_subtitle, focus_cue for {base_p}.", SCENES_SCHEMA, max_tokens=1600)
-        ai_s = {**ai_m, "scenes": ai_sc["scenes"]}
-
-    scenes = [{"time": float(s.get("time", times[min(i, 6)])), "narration": str(s.get("narration", "")).strip(), "text": str(s.get("narration", "")).strip(), "english_subtitle": str(s.get("english_subtitle", "")).strip(), "focus_cue": str(s.get("focus_cue") or "crosshair_lock")} for i, s in enumerate(ai_s["scenes"])]
-    out = {"title": ai_s.get("title") or topic, "topic": topic, "viral_format": v_fmt, "hook_line": hook, "description": ai_s.get("description", ""), "tags": ai_s.get("tags", ["freefire", "shorts", "gaming"]), "pinned_comment": ai_s.get("pinned_comment", ""), "pillar": bp["pillar"], "pillar_id": bp["pillar_id"], "pillar_name": bp["pillar_name"], "psychology_strategy": bp["psychology_strategy"], "search_query": q, "source_video_id": vid, "weapon": weapon, "damage": bp["damage"], "format_type": fmt, "target_duration": bp["target_duration"], "player_tag": "DEVIL-999", "script": " ".join(s["narration"] for s in scenes), "english_script": " ".join(s["english_subtitle"] for s in scenes), "scenes": scenes}
-    json.dump(out, open("current_script.json", "w", encoding="utf-8"), indent=2, ensure_ascii=False)
-    if os.path.isdir("kaggle_render"):
-        shutil.copy2("current_script.json", "kaggle_render/current_script.json")
-    save_history_entry(query=q, video_id=vid, title=out["title"], pillar_id=bp["pillar_id"])
-    print("[+] Done! Trend Script + Verified Free Fire Clip saved.")
 
 if __name__ == "__main__":
     generate_script()
