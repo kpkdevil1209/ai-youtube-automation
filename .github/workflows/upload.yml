@@ -22,24 +22,40 @@ jobs:
           python-version: '3.11'
           cache: 'pip'
 
+      - name: Setup Deno (For yt-dlp EJS Challenges)
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
       - name: Fast Syntax Check (1 Second Fail-Fast)
         run: python -m py_compile *.py
 
-      - name: Cache Ollama Models (5s Instant Restore)
+      - name: Cache Ollama Models (Text + Vision AI)
         uses: actions/cache@v4
         with:
           path: ~/.ollama
-          key: ${{ runner.os }}-ollama-llama3.2-1b
+          key: ${{ runner.os }}-ollama-llama3.2-1b-qwen2.5vl-3b-v1
+          restore-keys: |
+            ${{ runner.os }}-ollama-
 
-      - name: Install Dependencies, FFmpeg & Ollama
+      - name: Install Dependencies, FFmpeg & Ollama Models
         run: |
           sudo apt-get update -y
           sudo apt-get install -y ffmpeg
           pip install -U pip
-          pip install -U yt-dlp requests edge-tts google-api-python-client google-auth google-auth-oauthlib kaggle
+          pip install -U "yt-dlp[default]" requests edge-tts google-api-python-client google-auth google-auth-oauthlib kaggle bgutil-ytdlp-pot-provider six python-slugify python-dateutil
           if ! command -v ollama >/dev/null 2>&1; then
             curl -fsSL https://ollama.com/install.sh | sh
           fi
+          nohup ollama serve >/tmp/ollama.log 2>&1 &
+          for i in $(seq 1 15); do
+            if curl -fsS http://127.0.0.1:11434/api/tags >/dev/null 2>&1; then
+              break
+            fi
+            sleep 1
+          done
+          ollama list | grep -q "llama3.2:1b" || ollama pull llama3.2:1b
+          ollama list | grep -q "qwen2.5vl:3b" || ollama pull qwen2.5vl:3b
 
       - name: Step 0 - Empire Safety Shield Check
         env:
@@ -49,25 +65,32 @@ jobs:
             python empire_safety_shield.py
           fi
 
-      - name: Step 1 - Daily Task Planner (Pillars & Schedule)
-        run: python daily_task_planner.py
-
-      - name: Step 2 - AI Script (Ollama Schema) & 60FPS Real Gameplay Harvester
+      - name: Step 1 - Agent 1 (Viral Trend Scout) & Daily Task Planner
+        env:
+          YOUTUBE_TOKEN_PICKLE: ${{ secrets.YOUTUBE_TOKEN_PICKLE }}
         run: |
-          pip install -q bgutil-ytdlp-pot-provider
+          pgrep -x ollama >/dev/null || (nohup ollama serve >/tmp/ollama.log 2>&1 & sleep 4)
+          if [ -f viral_trend_agent.py ]; then
+            python viral_trend_agent.py
+          fi
+          if [ -f daily_task_planner.py ]; then
+            python daily_task_planner.py
+          fi
+
+      - name: Step 2 - Agent 2 & 3 (AI Script, Vision Check & Gameplay Harvester)
+        env:
+          YOUTUBE_TOKEN_PICKLE: ${{ secrets.YOUTUBE_TOKEN_PICKLE }}
+        run: |
+          pgrep -x ollama >/dev/null || (nohup ollama serve >/tmp/ollama.log 2>&1 & sleep 4)
           docker run --name bgutil-provider -d --init -p 127.0.0.1:4416:4416 brainicism/bgutil-ytdlp-pot-provider || true
-          WGCF_URL=$(curl -sSL https://api.github.com/repos/ViRb3/wgcf/releases/latest | python -c "import sys,json; print([a['browser_download_url'] for a in json.load(sys.stdin)['assets'] if 'linux_amd64' in a['name']][0])")
-          WIRE_URL=$(curl -sSL https://api.github.com/repos/windtf/wireproxy/releases/latest | python -c "import sys,json; print([a['browser_download_url'] for a in json.load(sys.stdin)['assets'] if 'linux_amd64.tar.gz' in a['name']][0])")
-          curl -fSL "$WGCF_URL" -o /tmp/wgcf && chmod +x /tmp/wgcf
-          curl -fSL "$WIRE_URL" -o /tmp/wp.tar.gz && tar -xzf /tmp/wp.tar.gz -C /tmp && chmod +x /tmp/wireproxy
-          (/tmp/wgcf register --accepted-tos && /tmp/wgcf generate && printf "WGConfig = ./wgcf-profile.conf\n[Socks5]\nBindAddress = 127.0.0.1:1080\n" > /tmp/wireproxy.conf && /tmp/wireproxy -c /tmp/wireproxy.conf >/dev/null 2>&1 & sleep 3) || true
+          (curl -fSL "https://github.com/ViRb3/wgcf/releases/download/v2.3.1/wgcf_2.3.1_linux_amd64" -o /tmp/wgcf && chmod +x /tmp/wgcf && curl -fSL "https://github.com/windtf/wireproxy/releases/latest/download/wireproxy_linux_amd64.tar.gz" -o /tmp/wp.tar.gz && tar -xzf /tmp/wp.tar.gz -C /tmp && chmod +x /tmp/wireproxy && /tmp/wgcf register --accepted-tos && /tmp/wgcf generate && printf "WGConfig = ./wgcf-profile.conf\n[Socks5]\nBindAddress = 127.0.0.1:1080\n" > /tmp/wireproxy.conf && /tmp/wireproxy -c /tmp/wireproxy.conf >/dev/null 2>&1 & sleep 3) || true
           python generate_script.py
           rm -f wgcf-account.toml wgcf-profile.conf 2>/dev/null || true
 
-      - name: Step 3 - Generate Mobile Human Audio & Tempered Glass Taps
+      - name: Step 3 - Agent 4A (Voice, SFX, BGM & Dual Subtitles)
         run: python generate_audio.py
 
-      - name: Step 4 - Commit & Push Gameplay & Audio for Kaggle
+      - name: Step 4 - Commit & Push Gameplay, Audio & Visual Hashes
         run: |
           mkdir -p kaggle_render
           cp -f raw_gameplay.mp4 final_audio.wav current_script.json kaggle_render/ 2>/dev/null || true
@@ -76,6 +99,7 @@ jobs:
           git config --global user.email "bot@devil-insanity.local"
           git add -A
           git commit -m "Pass gameplay & assets to Kaggle [skip ci]" || echo "Nothing new to commit"
+          git pull --rebase origin main || true
           git push origin main
 
       - name: Step 5 - Setup Kaggle Credentials
@@ -92,9 +116,8 @@ jobs:
           fi
           chmod 600 ~/.kaggle/kaggle.json
 
-      - name: Step 6 - Kaggle Render (Fast CPU Mode, Zero Fallback)
+      - name: Step 6 - Agent 4B (Kaggle Render CPU Mode, Zero Fallback)
         run: |
-          pip install -q six python-slugify python-dateutil
           rm -rf kaggle_assets && mkdir -p kaggle_assets
           cp -f raw_gameplay.mp4 final_audio.wav current_script.json kaggle_assets/
           cp -f subtitles.srt subtitles_en.srt kaggle_assets/ 2>/dev/null || true
@@ -133,15 +156,19 @@ jobs:
           kaggle kernels output "$KERNEL_ID" -p .
           ls -lh final_output.mp4
 
-      - name: Step 7 - Upload & Schedule to YouTube (18:00 PKT)
-        env:
-          YOUTUBE_TOKEN_PICKLE: ${{ secrets.YOUTUBE_TOKEN_PICKLE }}
-        run: python upload_video.py
-
-      - name: Step 8 - Launch Live Comment Auto-Reply & Heart Bot
+      - name: Step 7 - Agent 5 (QA Guard) & Upload to YouTube (18:00 PKT)
         env:
           YOUTUBE_TOKEN_PICKLE: ${{ secrets.YOUTUBE_TOKEN_PICKLE }}
         run: |
-          nohup ollama serve >/dev/null 2>&1 &
-          sleep 3
+          pgrep -x ollama >/dev/null || (nohup ollama serve >/tmp/ollama.log 2>&1 & sleep 4)
+          if [ -f qa_guard_agent.py ]; then
+            python qa_guard_agent.py final_output.mp4
+          fi
+          python upload_video.py
+
+      - name: Step 8 - Agent 6 (Live Comment Auto-Reply & Heart Bot)
+        env:
+          YOUTUBE_TOKEN_PICKLE: ${{ secrets.YOUTUBE_TOKEN_PICKLE }}
+        run: |
+          pgrep -x ollama >/dev/null || (nohup ollama serve >/tmp/ollama.log 2>&1 & sleep 4)
           python comment_reply_bot.py
