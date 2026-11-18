@@ -14,7 +14,7 @@ RAW_Q = [
     "free fire cs rank grandmaster gameplay",
 ]
 BANNED = ["pubg", "bgmi", "cod", "fortnite", "valorant", "minecraft", "gta", "roblox", "giveaway", "mod apk"]
-FF_HINTS = ["free fire", "freefire", "ff", "booyah", "headshot", "onetap", "one tap", "m1887", "desert eagle", "cs rank", "garena", "ruok", "raistar", "esta arma"]
+FF_HINTS = ["free fire", "freefire", "ff", "booyah", "headshot", "onetap", "one tap", "m1887", "desert eagle", "cs rank", "garena", "ruok", "raistar", "esta arma", "kills"]
 SCRIPT_SCHEMA = {
     "type": "object",
     "properties": {
@@ -80,8 +80,7 @@ def dl_ytdlp(url, out, proxy=None, is_yt=False):
     try:
         p = subprocess.run(cmd + [url], capture_output=True, text=True, timeout=65)
         return p.returncode == 0 and os.path.exists(out) and os.path.getsize(out) > 300000
-    except Exception:
-        return False
+    except Exception: return False
 
 
 def dl_mp4(url, out):
@@ -93,13 +92,10 @@ def dl_mp4(url, out):
             total = 0
             with open(out, "wb") as f:
                 for c in r.iter_content(131072):
-                    if c:
-                        f.write(c); total += len(c)
-                    if total > 75 * 1024 * 1024 or (time.time() - t0) > 40:
-                        break
+                    if c: f.write(c); total += len(c)
+                    if total > 75 * 1024 * 1024 or (time.time() - t0) > 40: break
         return os.path.exists(out) and os.path.getsize(out) > 300000
-    except Exception:
-        return False
+    except Exception: return False
 
 
 def harvest(brief):
@@ -127,7 +123,7 @@ def harvest(brief):
             for e in edges:
                 if tried >= 2 or time.time() - t_start > 240: break
                 n = e.get("node") or {}
-                if 12 <= (n.get("durationSeconds") or 0) <= 180:
+                if 18 <= (n.get("durationSeconds") or 0) <= 180:
                     tried += 1
                     if dl_ytdlp(n.get("url") or f"https://clips.twitch.tv/{n.get('slug')}", "c_tw.mp4"):
                         if finalize_clip("c_tw.mp4", f"Free Fire {n.get('title','')}"): return True
@@ -144,7 +140,7 @@ def harvest(brief):
             for v in vids:
                 if tried >= 2: break
                 t, u = v.get("title") or q, v.get("hdplay") or v.get("play")
-                if 12 <= int(v.get("duration") or 0) <= 180 and safe_title(t + " " + q) and u:
+                if 18 <= int(v.get("duration") or 0) <= 180 and safe_title(t + " " + q) and u:
                     tried += 1
                     if dl_mp4(u, "c_tt.mp4") and finalize_clip("c_tt.mp4", t): return True
         except Exception: pass
@@ -159,7 +155,7 @@ def harvest(brief):
             tried = 0
             for it in items:
                 if tried >= 2: break
-                if 14 <= int(it.get("duration") or 0) <= 420 and safe_title(it.get("title")):
+                if 18 <= int(it.get("duration") or 0) <= 420 and safe_title(it.get("title")):
                     tried += 1
                     if dl_ytdlp(it["url"], "c_dm.mp4") and finalize_clip("c_dm.mp4", it["title"]): return True
         except Exception: pass
@@ -172,7 +168,7 @@ def harvest(brief):
             p = subprocess.run(cmd, capture_output=True, text=True, timeout=25)
             if p.returncode == 0 and p.stdout.strip():
                 for e in (json.loads(p.stdout).get("entries") or [])[:2]:
-                    if e.get("id") and 14 <= int(e.get("duration") or 0) <= 420 and safe_title(e.get("title")):
+                    if e.get("id") and 18 <= int(e.get("duration") or 0) <= 420 and safe_title(e.get("title")):
                         if dl_ytdlp(f"https://www.youtube.com/watch?v={e['id']}", "c_yt.mp4", proxy, True) and finalize_clip("c_yt.mp4", e["title"]): return True
         except Exception: pass
 
@@ -186,6 +182,13 @@ def harvest(brief):
     raise RuntimeError("FATAL: No verified Free Fire raw gameplay found.")
 
 
+def clean_segs(raw_segs):
+    return [{"text": str(s.get("text") if isinstance(s, dict) else s).strip(),
+             "pace": s.get("pace", "normal") if isinstance(s, dict) and s.get("pace") in ["fast", "normal", "slow"] else "normal",
+             "sfx": s.get("sfx", "whoosh") if isinstance(s, dict) and s.get("sfx") in ["hit", "whoosh", "none"] else "whoosh"}
+            for s in (raw_segs or []) if (s.get("text") if isinstance(s, dict) else str(s)).strip()]
+
+
 def write_script(brief):
     try: requests.post(f"{OLLAMA_BASE}/api/generate", json={"model": "qwen2.5vl:3b", "prompt": "", "keep_alive": 0}, timeout=8)
     except Exception: pass
@@ -197,38 +200,47 @@ def write_script(brief):
 
     scene = ""
     if os.path.exists("verified_scene.json"):
-        try: scene = f" Clip scene: {json.load(open('verified_scene.json')).get('scene', '')}."
+        try: scene = f" On-screen gameplay: {json.load(open('verified_scene.json')).get('scene', '')}."
         except Exception: pass
 
-    prompt = (f"Write a viral 25s Free Fire Short script in Hinglish/Roman Urdu for DEVIL INSANITY. Topic: {brief['topic']}. Style: {brief['format']}.{scene} "
-              f"Hook: {brief['hook']}. Output valid JSON with title (max 80 chars #shorts), description (with #freefire #shorts), 6 tags, 1 pinned_comment, and 5 segments (text, pace=fast/normal/slow, sfx=hit/whoosh/none).")
+    base_prompt = (
+        f"Write a 28-second high-retention Free Fire YouTube Short script in energetic Hinglish/Roman Urdu. "
+        f"Topic: {brief['topic']}. Style: {brief['format']}.{scene} Start with shock hook: {brief['hook']}. "
+        f"IMPORTANT: Write EXACTLY 7 detailed segments, and EACH segment text MUST be 10 to 13 words long (minimum 70 words total) ending with a seamless loop line. "
+        f"Return compact JSON with: title (catchy max 75 chars about '{brief['topic']}' + #shorts), description (2 lines + #freefire #shorts), "
+        f"tags (6 strings), pinned_comment (1 Roman Urdu question), segments (7 dicts: text, pace [fast/normal/slow], sfx [hit/whoosh/none])."
+    )
 
-    for i in range(3):
+    best_p, best_segs, best_wc = None, [], 0
+    for i in range(4):
         try:
+            extra = "" if best_wc == 0 else f" Previous draft was only {best_wc} words, TOO SHORT! Expand every segment to 11-14 words so total exceeds 75 words."
             print(f"[*] Calling {model} (attempt {i+1})...")
             r = requests.post(f"{OLLAMA_BASE}/api/generate",
-                              json={"model": model, "prompt": prompt, "stream": False, "format": SCRIPT_SCHEMA, "keep_alive": 0,
-                                    "options": {"num_ctx": 1024, "num_predict": 320, "temperature": 0.3}}, timeout=75)
+                              json={"model": model, "prompt": base_prompt + extra, "stream": False, "format": SCRIPT_SCHEMA, "keep_alive": 0,
+                                    "options": {"num_ctx": 1536, "num_predict": 680, "temperature": 0.45}}, timeout=95)
             if r.status_code != 200: print(f"[!] Ollama {r.status_code}"); time.sleep(2); continue
-            raw = r.json().get("response", "").strip()
-            p = json.loads(raw)
-            segs = [{"text": str(s.get("text") if isinstance(s, dict) else s).strip(),
-                     "pace": s.get("pace", "normal") if isinstance(s, dict) and s.get("pace") in ["fast", "normal", "slow"] else "normal",
-                     "sfx": s.get("sfx", "whoosh") if isinstance(s, dict) and s.get("sfx") in ["hit", "whoosh", "none"] else "whoosh"}
-                    for s in (p.get("segments") or []) if (s.get("text") if isinstance(s, dict) else str(s)).strip()]
-            if len(segs) < 2:
-                segs = [{"text": brief["hook"], "pace": "fast", "sfx": "hit"}, {"text": f"{brief['topic']} ka asli raaz dekho!", "pace": "normal", "sfx": "whoosh"}]
-            title = str(p.get("title") or brief["topic"]).replace("<", "").replace(">", "").strip()[:95]
-            if "#shorts" not in title.lower(): title = (title[:85] + " #shorts").strip()
-            txt = " ".join(x["text"] for x in segs)
-            return {"title": title, "description": str(p.get("description") or f"{brief['topic']}\n#freefire #shorts").replace("<", "").replace(">", ""),
-                    "tags": [str(t) for t in (p.get("tags") or ["free fire", "free fire max", "shorts"])[:10]],
-                    "pinned_comment": str(p.get("pinned_comment") or "Aap ko yeh trick kaisi lagi? Comment karo!"),
-                    "topic": brief["topic"], "format": brief["format"], "theme": random.choice(["CRIMSON", "CYBER", "GOLDEN", "ICE"]),
-                    "hook": brief["hook"], "segments": segs, "narration": txt, "script": txt}
+            p = json.loads(r.json().get("response", "").strip())
+            segs = clean_segs(p.get("segments"))
+            wc = sum(len(x["text"].split()) for x in segs)
+            print(f"    [Draft {i+1}] {len(segs)} segments | {wc} words")
+            if wc > best_wc: best_p, best_segs, best_wc = p, segs, wc
+            if wc >= 55 and len(segs) >= 5: break
         except Exception as e:
             print(f"[!] Ollama retry {i+1}: {e}"); time.sleep(2)
-    raise RuntimeError("FATAL: Ollama failed to generate script.")
+
+    if not best_p or best_wc < 20:
+        raise RuntimeError("FATAL: Ollama failed to generate valid length script.")
+
+    title = str(best_p.get("title") or brief["topic"]).replace("<", "").replace(">", "").strip()[:95]
+    if "#shorts" not in title.lower(): title = (title[:85] + " #shorts").strip()
+    txt = " ".join(x["text"] for x in best_segs)
+    print(f"[+] Script Approved: {len(best_segs)} segments | {best_wc} words (~{best_wc/2.6:.1f}s)")
+    return {"title": title, "description": str(best_p.get("description") or f"{brief['topic']}\n#freefire #shorts").replace("<", "").replace(">", ""),
+            "tags": [str(t) for t in (best_p.get("tags") or ["free fire", "free fire max", "shorts"])[:10]],
+            "pinned_comment": str(best_p.get("pinned_comment") or "Aap ko yeh trick kaisi lagi? Comment karo!"),
+            "topic": brief["topic"], "format": brief["format"], "theme": random.choice(["CRIMSON", "CYBER", "GOLDEN", "ICE"]),
+            "hook": brief["hook"], "segments": best_segs, "narration": txt, "script": txt}
 
 
 def generate_script():
