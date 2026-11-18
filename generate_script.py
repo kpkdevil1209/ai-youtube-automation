@@ -135,7 +135,6 @@ def harvest(brief):
         try:
             vids = (requests.get("https://www.tikwm.com/api/feed/search", params={"keywords": q, "count": 8, "cursor": 0},
                                  headers={"User-Agent": UA}, timeout=12).json().get("data") or {}).get("videos") or []
-            print(f"    [TikWM] {len(vids)} videos")
             tried = 0
             for v in vids:
                 if tried >= 2: break
@@ -151,7 +150,6 @@ def harvest(brief):
         try:
             items = requests.get("https://api.dailymotion.com/videos", params={"channel": "videogames", "search": q, "sort": "visited", "limit": 6, "fields": "title,url,duration"},
                                  headers={"User-Agent": UA}, timeout=12).json().get("list") or []
-            print(f"    [Dailymotion] {len(items)} items")
             tried = 0
             for it in items:
                 if tried >= 2: break
@@ -182,11 +180,29 @@ def harvest(brief):
     raise RuntimeError("FATAL: No verified Free Fire raw gameplay found.")
 
 
-def clean_segs(raw_segs):
-    return [{"text": str(s.get("text") if isinstance(s, dict) else s).strip(),
-             "pace": s.get("pace", "normal") if isinstance(s, dict) and s.get("pace") in ["fast", "normal", "slow"] else "normal",
-             "sfx": s.get("sfx", "whoosh") if isinstance(s, dict) and s.get("sfx") in ["hit", "whoosh", "none"] else "whoosh"}
-            for s in (raw_segs or []) if (s.get("text") if isinstance(s, dict) else str(s)).strip()]
+def cap_segments(raw_segs, max_words=84):
+    flat = []
+    for s in (raw_segs or []):
+        txt = str(s.get("text") if isinstance(s, dict) else s).strip()
+        if not txt: continue
+        pace = s.get("pace", "normal") if isinstance(s, dict) and s.get("pace") in ["fast", "normal", "slow"] else "normal"
+        sfx = s.get("sfx", "whoosh") if isinstance(s, dict) and s.get("sfx") in ["hit", "whoosh", "none"] else "whoosh"
+        words = txt.split()
+        if len(words) > 20:
+            for k in range(0, len(words), 12):
+                flat.append({"text": " ".join(words[k:k+12]), "pace": pace, "sfx": sfx})
+        else:
+            flat.append({"text": txt, "pace": pace, "sfx": sfx})
+    out, total = [], 0
+    for seg in flat:
+        w = len(seg["text"].split())
+        if total + w <= max_words or not out:
+            out.append(seg); total += w
+        else:
+            break
+    if total > max_words and len(out) == 1:
+        out[0]["text"] = " ".join(out[0]["text"].split()[:max_words])
+    return out
 
 
 def write_script(brief):
@@ -204,28 +220,29 @@ def write_script(brief):
         except Exception: pass
 
     base_prompt = (
-        f"Write a 28-second high-retention Free Fire YouTube Short script in energetic Hinglish/Roman Urdu. "
-        f"Topic: {brief['topic']}. Style: {brief['format']}.{scene} Start with shock hook: {brief['hook']}. "
-        f"IMPORTANT: Write EXACTLY 7 detailed segments, and EACH segment text MUST be 10 to 13 words long (minimum 70 words total) ending with a seamless loop line. "
-        f"Return compact JSON with: title (catchy max 75 chars about '{brief['topic']}' + #shorts), description (2 lines + #freefire #shorts), "
-        f"tags (6 strings), pinned_comment (1 Roman Urdu question), segments (7 dicts: text, pace [fast/normal/slow], sfx [hit/whoosh/none])."
+        f"Write a 28-second viral Free Fire YouTube Short script in Hinglish/Roman Urdu. "
+        f"Topic: {brief['topic']}. Style: {brief['format']}.{scene} Start with hook: {brief['hook']}. "
+        f"STRICT RULE: Write EXACTLY 6 segments, EACH segment 10 to 12 words (65 to 78 words TOTAL, NEVER over 85 words). "
+        f"Return JSON with: title (catchy max 75 chars about '{brief['topic']}' + #shorts), description (2 lines + #freefire #shorts), "
+        f"tags (6 strings), pinned_comment (1 Roman Urdu question), segments (6 dicts: text, pace [fast/normal/slow], sfx [hit/whoosh/none])."
     )
 
     best_p, best_segs, best_wc = None, [], 0
-    for i in range(4):
+    for i in range(3):
         try:
-            extra = "" if best_wc == 0 else f" Previous draft was only {best_wc} words, TOO SHORT! Expand every segment to 11-14 words so total exceeds 75 words."
+            extra = "" if best_wc == 0 else f" Keep TOTAL strictly between 60 and 80 words across 6 segments."
             print(f"[*] Calling {model} (attempt {i+1})...")
             r = requests.post(f"{OLLAMA_BASE}/api/generate",
                               json={"model": model, "prompt": base_prompt + extra, "stream": False, "format": SCRIPT_SCHEMA, "keep_alive": 0,
-                                    "options": {"num_ctx": 1536, "num_predict": 680, "temperature": 0.45}}, timeout=95)
+                                    "options": {"num_ctx": 1536, "num_predict": 550, "temperature": 0.4}}, timeout=95)
             if r.status_code != 200: print(f"[!] Ollama {r.status_code}"); time.sleep(2); continue
             p = json.loads(r.json().get("response", "").strip())
-            segs = clean_segs(p.get("segments"))
+            segs = cap_segments(p.get("segments"), max_words=84)
             wc = sum(len(x["text"].split()) for x in segs)
-            print(f"    [Draft {i+1}] {len(segs)} segments | {wc} words")
-            if wc > best_wc: best_p, best_segs, best_wc = p, segs, wc
-            if wc >= 55 and len(segs) >= 5: break
+            print(f"    [Draft {i+1}] {len(segs)} segments | {wc} words (~{wc/2.6:.1f}s)")
+            if not best_p or abs(wc - 70) < abs(best_wc - 70):
+                best_p, best_segs, best_wc = p, segs, wc
+            if 50 <= wc <= 84: break
         except Exception as e:
             print(f"[!] Ollama retry {i+1}: {e}"); time.sleep(2)
 
