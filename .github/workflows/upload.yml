@@ -54,15 +54,27 @@ jobs:
             fi
             sleep 1
           done
-          ollama list | grep -q "llama3.2:1b" || ollama pull llama3.2:1b
-          ollama list | grep -q "qwen2.5vl:3b" || ollama pull qwen2.5vl:3b
+          for m in llama3.2:1b qwen2.5vl:3b; do
+            if ! ollama list | grep -q "$m"; then
+              ok=0
+              for r in 1 2 3; do
+                if ollama pull "$m"; then
+                  ok=1
+                  break
+                fi
+                echo "[!] Pull attempt $r failed for $m, retrying in 8s..."
+                sleep 8
+              done
+              [ "$ok" -eq 1 ] || exit 1
+            fi
+          done
 
       - name: Step 0 - Empire Safety Shield Check
         env:
           YOUTUBE_TOKEN_PICKLE: ${{ secrets.YOUTUBE_TOKEN_PICKLE }}
         run: |
           if [ -f empire_safety_shield.py ]; then
-            python empire_safety_shield.py
+            python -u empire_safety_shield.py
           fi
 
       - name: Step 1 - Agent 1 (Viral Trend Scout) & Daily Task Planner
@@ -71,10 +83,10 @@ jobs:
         run: |
           pgrep -x ollama >/dev/null || (nohup ollama serve >/tmp/ollama.log 2>&1 & sleep 4)
           if [ -f viral_trend_agent.py ]; then
-            python viral_trend_agent.py
+            python -u viral_trend_agent.py
           fi
           if [ -f daily_task_planner.py ]; then
-            python daily_task_planner.py
+            python -u daily_task_planner.py
           fi
 
       - name: Step 2 - Agent 2 & 3 (AI Script, Vision Check & Gameplay Harvester)
@@ -83,12 +95,12 @@ jobs:
         run: |
           pgrep -x ollama >/dev/null || (nohup ollama serve >/tmp/ollama.log 2>&1 & sleep 4)
           docker run --name bgutil-provider -d --init -p 127.0.0.1:4416:4416 brainicism/bgutil-ytdlp-pot-provider || true
-          (curl -fSL "https://github.com/ViRb3/wgcf/releases/download/v2.3.1/wgcf_2.3.1_linux_amd64" -o /tmp/wgcf && chmod +x /tmp/wgcf && curl -fSL "https://github.com/windtf/wireproxy/releases/latest/download/wireproxy_linux_amd64.tar.gz" -o /tmp/wp.tar.gz && tar -xzf /tmp/wp.tar.gz -C /tmp && chmod +x /tmp/wireproxy && /tmp/wgcf register --accepted-tos && /tmp/wgcf generate && printf "WGConfig = ./wgcf-profile.conf\n[Socks5]\nBindAddress = 127.0.0.1:1080\n" > /tmp/wireproxy.conf && /tmp/wireproxy -c /tmp/wireproxy.conf >/dev/null 2>&1 & sleep 3) || true
-          python generate_script.py
+          (curl -fSL --max-time 20 "https://github.com/ViRb3/wgcf/releases/download/v2.3.1/wgcf_2.3.1_linux_amd64" -o /tmp/wgcf && chmod +x /tmp/wgcf && curl -fSL --max-time 20 "https://github.com/windtf/wireproxy/releases/latest/download/wireproxy_linux_amd64.tar.gz" -o /tmp/wp.tar.gz && tar -xzf /tmp/wp.tar.gz -C /tmp && chmod +x /tmp/wireproxy && /tmp/wgcf register --accepted-tos && /tmp/wgcf generate && printf "WGConfig = ./wgcf-profile.conf\n[Socks5]\nBindAddress = 127.0.0.1:1080\n" > /tmp/wireproxy.conf && nohup /tmp/wireproxy -c /tmp/wireproxy.conf >/tmp/wp.log 2>&1 </dev/null & sleep 3) || true
+          python -u generate_script.py
           rm -f wgcf-account.toml wgcf-profile.conf 2>/dev/null || true
 
       - name: Step 3 - Agent 4A (Voice, SFX, BGM & Dual Subtitles)
-        run: python generate_audio.py
+        run: python -u generate_audio.py
 
       - name: Step 4 - Commit & Push Gameplay, Audio & Visual Hashes
         run: |
@@ -162,13 +174,13 @@ jobs:
         run: |
           pgrep -x ollama >/dev/null || (nohup ollama serve >/tmp/ollama.log 2>&1 & sleep 4)
           if [ -f qa_guard_agent.py ]; then
-            python qa_guard_agent.py final_output.mp4
+            python -u qa_guard_agent.py final_output.mp4
           fi
-          python upload_video.py
+          python -u upload_video.py
 
       - name: Step 8 - Agent 6 (Live Comment Auto-Reply & Heart Bot)
         env:
           YOUTUBE_TOKEN_PICKLE: ${{ secrets.YOUTUBE_TOKEN_PICKLE }}
         run: |
           pgrep -x ollama >/dev/null || (nohup ollama serve >/tmp/ollama.log 2>&1 & sleep 4)
-          python comment_reply_bot.py
+          python -u comment_reply_bot.py
