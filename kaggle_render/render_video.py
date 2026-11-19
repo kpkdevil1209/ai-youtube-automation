@@ -1,127 +1,123 @@
-# kaggle_render/render_video.py - Agent 4B: Viral Shorts Visual Director
-import os, re, json, hashlib, subprocess
+import os, re, glob, json, subprocess
+from PIL import Image, ImageDraw, ImageFont
 
-OUTPUT_VIDEO = "final_output.mp4"
-POWER_WORDS = {"HEADSHOT", "DEVIL", "1HP", "HACKER", "CLUTCH", "AWM", "M1887", "PRO", "ONE", "TAP", "KILL", "SHOCK", "SECRET", "LEGIT", "BUSTED", "IMPOSSIBLE"}
-THEMES = [
-    {"name": "CRIMSON", "bar": "0xFF2E4C", "box": "red@0.88", "ass_hi": "&H0000FFFF&", "eq": "contrast=1.18:saturation=1.35:brightness=0.02"},
-    {"name": "CYBER",   "bar": "0x00F5FF", "box": "purple@0.85", "ass_hi": "&H00FFFF00&", "eq": "contrast=1.20:saturation=1.42:brightness=0.01"},
-    {"name": "GOLDEN",  "bar": "0xFFD700", "box": "darkorange@0.88", "ass_hi": "&H0033FF66&", "eq": "contrast=1.16:saturation=1.32:brightness=0.03"},
-    {"name": "ICE",     "bar": "0x38BDF8", "box": "navy@0.88", "ass_hi": "&H0000FFFF&", "eq": "contrast=1.22:saturation=1.28:brightness=0.02"}
-]
 
-def find_asset(name):
+def find_file(name):
     if os.path.exists(name): return name
-    for r, _, fs in (os.walk("/kaggle/input") if os.path.exists("/kaggle/input") else []):
-        if name in fs: return os.path.join(r, name)
-    return None
+    hits = glob.glob(f"/kaggle/input/**/{name}", recursive=True)
+    return hits[0] if hits else None
 
-def probe_json(path):
-    return json.loads(subprocess.check_output(["ffprobe", "-v", "error", "-show_streams", "-show_format", "-of", "json", path], text=True))
 
-def find_bold_font():
-    for root in ("/usr/share/fonts", "/kaggle/input"):
-        if os.path.exists(root):
-            for r, _, fs in os.walk(root):
-                for f in fs:
-                    if "bold" in f.lower() and f.endswith(".ttf"):
-                        return os.path.join(r, f)
-    return None
+def probe_dur(path):
+    r = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", path], capture_output=True, text=True)
+    try: return max(1.0, float(r.stdout.strip()))
+    except Exception: return 18.0
 
-def srt_to_ass_time(t):
-    h, m, s_ms = t.strip().split(":")
-    s, ms = s_ms.split(",")
-    return f"{int(h)}:{m}:{s}.{ms[:2]}"
 
-def build_pop_ass(srt_path, ass_path, hi_col):
-    raw = open(srt_path, "r", encoding="utf-8").read().strip().split("\n\n")
-    head = (
-        "[Script Info]\nScriptType: v4.00+\nPlayResX: 1080\nPlayResY: 1920\n\n"
-        "[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n"
-        "Style: Pop,DejaVu Sans,68,&H00FFFFFF,&H000000FF,&H00000000,&H64000000,-1,0,0,0,100,100,1,0,1,5,2,2,40,40,260,1\n\n"
-        "[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
+def build_ass(srt_path, ass_path):
+    power = {"1", "HP", "WAIT", "STOP", "HEADSHOT", "CLUTCH", "IMPOSSIBLE", "LOCK", "WIPE", "TRAP", "KILL", "INSANE", "DEAD", "SHOT"}
+    hdr = "[Script Info]\nScriptType: v4.00+\nPlayResX: 1080\nPlayResY: 1920\n\n[V4+ Styles]\nFormat: Name,Fontname,Fontsize,PrimaryColour,SecondaryColour,OutlineColour,BackColour,Bold,Italic,Underline,StrikeOut,ScaleX,ScaleY,Spacing,Angle,BorderStyle,Outline,Shadow,Alignment,MarginL,MarginR,MarginV,Encoding\nStyle: Pop,DejaVu Sans,82,&H00FFFFFF,&H0000D7FF,&H00000000,&H80000000,-1,0,0,0,100,100,2,0,1,6,3,2,40,40,340,1\n\n[Events]\nFormat: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text\n"
+    events = []
+    if srt_path and os.path.exists(srt_path):
+        blocks = open(srt_path, "r", encoding="utf-8").read().strip().split("\n\n")
+        for b in blocks:
+            lines = b.splitlines()
+            if len(lines) < 3 or "-->" not in lines[1]: continue
+            st, et = [x.strip().replace(",", ".")[:-1] for x in lines[1].split("-->")]
+            words = " ".join(lines[2:]).upper().split()
+            styled = []
+            for w in words:
+                clean = re.sub(r"[^A-Z0-9]", "", w)
+                styled.append(f"{{\\c&H00D7FF&}}{w}{{\\c&HFFFFFF&}}" if clean in power else w)
+            anim = "{\\fscx80\\fscy80\\t(0,85,\\fscx114\\fscy114)\\t(85,175,\\fscx100\\fscy100)}"
+            events.append(f"Dialogue: 0,{st},{et},Pop,,0,0,0,,{anim}{' '.join(styled)}")
+    open(ass_path, "w", encoding="utf-8").write(hdr + "\n".join(events))
+
+
+def make_overlays(badge_text, color_hex):
+    r, g, b = int(color_hex[1:3], 16), int(color_hex[3:5], 16), int(color_hex[5:7], 16)
+    hud = Image.new("RGBA", (1080, 1920), (0, 0, 0, 0))
+    d = ImageDraw.Draw(hud)
+    d.rounded_rectangle([140, 105, 940, 185], radius=24, fill=(12, 14, 20, 205), outline=(r, g, b, 240), width=4)
+    try: font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 34)
+    except Exception: font = ImageFont.load_default()
+    d.text((540, 145), badge_text[:30], fill=(255, 255, 255, 255), font=font, anchor="mm")
+    hud.save("hud_overlay.png")
+
+    ring = Image.new("RGBA", (1080, 1920), (0, 0, 0, 0))
+    rd = ImageDraw.Draw(ring)
+    cx, cy = 540, 860
+    rd.ellipse([cx - 145, cy - 145, cx + 145, cy + 145], outline=(255, 45, 45, 235), width=10)
+    rd.ellipse([cx - 118, cy - 118, cx + 118, cy + 118], outline=(255, 220, 60, 180), width=3)
+    rd.line([(cx - 180, cy), (cx - 125, cy)], fill=(255, 45, 45, 235), width=6)
+    rd.line([(cx + 125, cy), (cx + 180, cy)], fill=(255, 45, 45, 235), width=6)
+    ring.save("red_ring.png")
+
+
+def make_portrait_piece(src, ss, dur, pts_mul, extra_vf, out_mp4):
+    vf = (f"split=2[bg][fg];[bg]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=22:8,eq=brightness=-0.10[bgb];"
+          f"[fg]scale=1080:-2:force_original_aspect_ratio=decrease[fgp];"
+          f"[bgb][fgp]overlay=(W-w)/2:(H-h)/2,setpts={pts_mul}*(PTS-STARTPTS){extra_vf},fps=60,setsar=1,format=yuv420p")
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-ss", f"{ss:.2f}", "-t", f"{dur:.2f}", "-i", src, "-an", "-vf", vf, "-c:v", "libx264", "-preset", "fast", "-crf", "19", out_mp4], check=True)
+
+
+def render():
+    v_in = find_file("raw_gameplay.mp4")
+    a_in = find_file("final_audio.wav")
+    j_in = find_file("current_script.json")
+    s_in = find_file("subtitles.srt") or find_file("subtitles_en.srt")
+    if not v_in or not a_in: raise RuntimeError("Missing raw_gameplay.mp4 or final_audio.wav")
+
+    meta = json.load(open(j_in, "r", encoding="utf-8")) if j_in else {}
+    aud_dur = probe_dur(a_in)
+    vid_dur = probe_dur(v_in)
+    k = max(3.5, min(vid_dur - 1.2, float((meta.get("timeline") or {}).get("kill_at") or vid_dur * 0.72)))
+    beats = meta.get("beat_times") or [0.0, aud_dur * 0.18, aud_dur * 0.42, aud_dur * 0.66, aud_dur * 0.85]
+    slow_start = float(beats[3]) if len(beats) > 3 else aud_dur * 0.65
+
+    theme_map = {
+        "CRIMSON": ("#FF2E43", "eq=contrast=1.12:saturation=1.24"),
+        "CYBER": ("#00E5FF", "eq=contrast=1.10:saturation=1.28:gamma_b=1.08"),
+        "GOLDEN": ("#FFB800", "eq=contrast=1.10:saturation=1.22:gamma_r=1.06"),
+        "ICE": ("#4DD0E1", "eq=contrast=1.12:saturation=1.15:gamma_b=1.10"),
+    }
+    hex_c, grade_vf = theme_map.get(meta.get("theme", "CRIMSON"), theme_map["CRIMSON"])
+    make_overlays(meta.get("hook_badge", "0.25X CLIMAX ANALYSIS"), hex_c)
+    build_ass(s_in, "captions.ass")
+
+    p1_dur = max(1.4, float(beats[1]) if len(beats) > 1 else 2.2)
+    make_portrait_piece(v_in, max(0.0, k - 0.6), 0.75, round(p1_dur / 0.75, 2), ",rgbashift=rh=9:bv=-9:enable='gte(t,0.9)'", "p1.mp4")
+
+    setup_len = max(2.0, slow_start - p1_dur)
+    src_setup_ss = max(0.0, k - 0.8 - setup_len)
+    src_setup_take = max(1.5, (k - 0.8) - src_setup_ss)
+    make_portrait_piece(v_in, src_setup_ss, src_setup_take, round(setup_len / src_setup_take, 2), "", "p2.mp4")
+
+    rem = max(3.5, aud_dur - p1_dur - setup_len)
+    src_hit_take = min(vid_dur - max(0.0, k - 0.8), 1.6)
+    shake_vf = ",scale=1200:2133,crop=1080:1920:'(iw-ow)/2+if(between(t,0.4,1.6),28*sin(2*PI*t*18),0)':'(ih-oh)/2+if(between(t,0.4,1.6),28*cos(2*PI*t*16),0)',rgbashift=rh=10:bv=-10:enable='between(t,0.3,0.9)'"
+    make_portrait_piece(v_in, max(0.0, k - 0.8), src_hit_take, round((rem + 1.0) / max(0.8, src_hit_take), 2), shake_vf, "p3.mp4")
+
+    open("vlist.txt", "w").write("file 'p1.mp4'\nfile 'p2.mp4'\nfile 'p3.mp4'\n")
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "concat", "-safe", "0", "-i", "vlist.txt", "-c", "copy", "base_timeline.mp4"], check=True)
+
+    fc = (
+        f"[0:v]{grade_vf}[vg];"
+        f"[vg][2:v]overlay=0:0[vhud];"
+        f"[vhud][3:v]overlay=0:0:enable='between(t,{slow_start:.2f},{min(aud_dur, slow_start+3.2):.2f})'[vring];"
+        f"[vring]ass=captions.ass[vcap];"
+        f"color=c={hex_c}:s=1080x12:d={aud_dur:.2f}[bar];"
+        f"[vcap][bar]overlay=x='-w+(t/{aud_dur:.2f})*w':y=1904:shortest=1[vout]"
     )
-    lines = []
-    for blk in raw:
-        parts = blk.strip().splitlines()
-        if len(parts) < 3 or "-->" not in parts[1]: continue
-        st, en = [srt_to_ass_time(x) for x in parts[1].split("-->")]
-        words = " ".join(parts[2:]).upper().split()
-        styled = []
-        for w in words:
-            clean = re.sub(r"[^A-Z0-9]", "", w)
-            styled.append(f"{{\\c{hi_col}}}{w}{{\\c&H00FFFFFF&}}" if clean in POWER_WORDS else w)
-        anim = "{\\fscx75\\fscy75\\t(0,95,1.4,\\fscx116\\fscy116)\\t(95,190,1,\\fscx100\\fscy100)}"
-        lines.append(f"Dialogue: 0,{st},{en},Pop,,0,0,0,,{anim}{' '.join(styled)}")
-    open(ass_path, "w", encoding="utf-8").write(head + "\n".join(lines) + "\n")
-    return len(lines) > 0
+    subprocess.run([
+        "ffmpeg", "-y", "-v", "error",
+        "-i", "base_timeline.mp4", "-i", a_in, "-i", "hud_overlay.png", "-i", "red_ring.png",
+        "-filter_complex", fc, "-map", "[vout]", "-map", "1:a",
+        "-t", f"{aud_dur:.2f}", "-c:v", "libx264", "-preset", "medium", "-crf", "18",
+        "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", "final_output.mp4"
+    ], check=True)
+    print(f"[+] $1,000 Editor Render Complete: final_output.mp4 ({probe_dur('final_output.mp4'):.2f}s)")
 
-def wrap_title(txt, width=22):
-    words, lines, cur = str(txt or "DEVIL-999 PRO CLUTCH").upper().split(), [], ""
-    for w in words:
-        if len(cur) + len(w) + 1 <= width: cur = f"{cur} {w}".strip()
-        else:
-            if cur: lines.append(cur)
-            cur = w
-        if len(lines) == 2: break
-    if cur and len(lines) < 2: lines.append(cur)
-    return "\n".join(lines)[:50]
-
-def main():
-    print("\n==========================================")
-    print("[*] AGENT 4B: KAGGLE VIRAL SHORTS DIRECTOR")
-    print("==========================================\n")
-    raw_clip, audio_file = find_asset("raw_gameplay.mp4"), find_asset("final_audio.wav")
-    srt_src, script_src = find_asset("subtitles.srt"), find_asset("current_script.json")
-    if not raw_clip or not audio_file:
-        raise RuntimeError("FATAL: raw_gameplay.mp4 ya final_audio.wav missing!")
-
-    vi = probe_json(raw_clip)
-    vs = [s for s in vi.get("streams", []) if s.get("codec_type") == "video"]
-    aus = [s for s in vi.get("streams", []) if s.get("codec_type") == "audio"]
-    vw, vh = int(vs[0].get("width", 1280)), int(vs[0].get("height", 720))
-    vdur = float(vi.get("format", {}).get("duration", 30.0))
-    target_dur = max(10.0, float(probe_json(audio_file).get("format", {}).get("duration", 28.0)))
-
-    sc = json.load(open(script_src, "r", encoding="utf-8")) if script_src else {}
-    hook_title = re.sub(r"[^\w\s\-!?.,']", "", sc.get("title") or sc.get("topic") or "DEVIL-999 CLUTCH").strip()
-    badge_txt = re.sub(r"[^A-Z0-9\s\-]", "", str(sc.get("viral_format") or "DEVIL-999").upper()).strip() or "DEVIL-999"
-    theme = THEMES[int(hashlib.md5(hook_title.encode()).hexdigest(), 16) % len(THEMES)]
-
-    open("temp_title.txt", "w", encoding="utf-8").write(wrap_title(hook_title))
-    open("temp_badge.txt", "w", encoding="utf-8").write(f"DEVIL-999 | {badge_txt}"[:28])
-    use_ass = bool(srt_src and os.path.getsize(srt_src) > 10 and build_pop_ass(srt_src, "captions.ass", theme["ass_hi"]))
-    fp = find_bold_font()
-    fopt = f":fontfile={fp}" if fp else ""
-
-    fg_chain = "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920" if vh > vw else "scale=1080:-2"
-    mid = target_dur * 0.50
-    v_fc = (
-        f"[0:v]setpts=PTS-STARTPTS,split=2[vbg][vfg];"
-        f"[vbg]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,eq=brightness=-0.16:saturation=1.25,gblur=sigma=28[bg];"
-        f"[vfg]{fg_chain},eq={theme['eq']},eq=brightness=0.28:enable='between(t,0.03,0.11)+between(t,{mid:.2f},{mid+0.08:.2f})',unsharp=5:5:0.7:5:5:0.0[fg];"
-        f"[bg][fg]overlay=(W-w)/2:(H-h)/2,"
-        f"drawtext=textfile=temp_badge.txt{fopt}:fontsize=34:fontcolor=yellow:box=1:boxcolor={theme['box']}:boxborderw=10:x=(w-text_w)/2:y=95,"
-        f"drawtext=textfile=temp_title.txt{fopt}:fontsize=44:fontcolor=white:borderw=4:bordercolor=black:box=1:boxcolor=black@0.58:boxborderw=12:line_spacing=8:x=(w-text_w)/2:y=165[vtxt];"
-        f"color=c={theme['bar']}:s=1080x10:d={target_dur:.2f}[bar];"
-        f"[vtxt][bar]overlay=x='-w+(t/{target_dur:.2f})*w':y=1910:shortest=1"
-    )
-    if use_ass:
-        v_fc += ",ass=captions.ass"
-    v_fc += "[vout]"
-
-    a_fc = ";[1:a]aresample=44100,volume=1.0[vo];[0:a]aresample=44100,volume=0.16[sfx];[vo][sfx]amix=inputs=2:duration=first,volume=1.45[aout]" if aus else ""
-    a_map = "[aout]" if aus else "1:a"
-
-    cmd = ["ffmpeg", "-y", "-nostdin"] + (["-stream_loop", "-1"] if vdur < target_dur else []) + [
-        "-fflags", "+genpts", "-i", raw_clip, "-i", audio_file,
-        "-filter_complex", v_fc + a_fc, "-map", "[vout]", "-map", a_map, "-t", f"{target_dur:.2f}",
-        "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-r", "60", "-pix_fmt", "yuv420p",
-        "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", OUTPUT_VIDEO
-    ]
-    print(f"[*] Theme: {theme['name']} | {vw}x{vh} -> 1080x1920 60FPS ({target_dur:.1f}s)")
-    subprocess.run(cmd, check=True)
-    print(f"[+] RENDER COMPLETE: {OUTPUT_VIDEO} ({os.path.getsize(OUTPUT_VIDEO)/1048576:.2f} MB)")
 
 if __name__ == "__main__":
-    main()
+    render()
