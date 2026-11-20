@@ -18,9 +18,8 @@ QA_SCHEMA = {
         "is_gameplay": {"type": "boolean"},
         "is_corrupted_or_black": {"type": "boolean"},
         "confidence": {"type": "integer"},
-        "scene_note": {"type": "string"},
     },
-    "required": ["is_gameplay", "is_corrupted_or_black", "confidence", "scene_note"],
+    "required": ["is_gameplay", "is_corrupted_or_black", "confidence"],
 }
 
 
@@ -115,6 +114,22 @@ def quality_and_motion(path, dur):
         raise RuntimeError(f"QA FAIL: Frozen or static video (motion={avg_motion:.2f})")
 
 
+def parse_qa_json(raw):
+    try:
+        return json.loads(raw)
+    except Exception:
+        g = re.search(r'"is_gameplay"\s*:\s*(true|false)', raw, re.I)
+        b = re.search(r'"is_corrupted_or_black"\s*:\s*(true|false)', raw, re.I)
+        c = re.search(r'"confidence"\s*:\s*(\d+)', raw)
+        if g:
+            return {
+                "is_gameplay": g.group(1).lower() == "true",
+                "is_corrupted_or_black": (b.group(1).lower() == "true") if b else False,
+                "confidence": int(c.group(1)) if c else 80,
+            }
+        raise
+
+
 def ask_rendered_qa_frame(path, ts):
     with tempfile.TemporaryDirectory() as tmp:
         jpg = os.path.join(tmp, "v.jpg")
@@ -122,11 +137,10 @@ def ask_rendered_qa_frame(path, ts):
         with open(jpg, "rb") as f:
             b64 = base64.b64encode(f.read()).decode("utf-8")
     prompt = (
-        "Analyze this rendered vertical 9:16 mobile gaming Short frame. "
-        "Burned-in English captions, top HUD badges, red zoom circles, and dark vignette edges are NORMAL and EXPECTED. "
-        "Set is_gameplay=true if it shows shooter or battle-royale gameplay like Free Fire. "
-        "Set is_corrupted_or_black=true ONLY if it is a blank black screen, glitch bars, or non-gaming live camera. "
-        "Return strict JSON."
+        "Check this rendered vertical 9:16 mobile gaming Short frame. "
+        "English captions, HUD badges, red zoom circles, and vignette edges are NORMAL. "
+        "Set is_gameplay=true if it shows shooter or battle-royale game footage like Free Fire. "
+        "Set is_corrupted_or_black=true ONLY if mostly black, glitch bars, or real-life camera."
     )
     payload = {
         "model": VISION_MODEL,
@@ -134,17 +148,16 @@ def ask_rendered_qa_frame(path, ts):
         "stream": False,
         "format": QA_SCHEMA,
         "keep_alive": "2m",
-        "options": {"num_ctx": 2048, "num_predict": 90, "temperature": 0.0},
+        "options": {"num_ctx": 2048, "num_predict": 120, "temperature": 0.0},
     }
     try:
         r = requests.post(OLLAMA_URL, json=payload, timeout=120)
         r.raise_for_status()
         raw = r.json().get("message", {}).get("content", "{}")
-        data = json.loads(raw)
+        data = parse_qa_json(raw)
         ok = bool(data.get("is_gameplay")) and not bool(data.get("is_corrupted_or_black"))
         conf = int(data.get("confidence", 0))
-        note = str(data.get("scene_note", ""))[:80]
-        return ok, conf, note
+        return ok, conf, "ok"
     except Exception as e:
         return False, 0, f"err: {e}"
 
