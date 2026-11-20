@@ -1,9 +1,9 @@
 {
   "kill_at": 7.5,
   "duration": 11.5,
-  "weapon": "P90",
-  "before_7s": "field with grass and trees, enemy distance: 100 meters, damage or knock: 100 damage",
-  "tension_aim": "Tension Aim at 6.0s, enemy distance unknown, potential damage or knock",
-  "headshot_hit": "intense Free Fire combat",
-  "after_kill": "After killing an enemy, the player is in a yellow container area with a red car nearby. The pla"
+  "weapon": "Pistol",
+  "before_7s": "Close range combat with enemy in front of the player's position.",
+  "tension_aim": "Tension during a Free Fire match, aiming at an enemy at a distance of 6 meters, with potential ",
+  "headshot_hit": "Close range, enemy distance 10 meters, headshot hit at 7.5 seconds, damage 1000, knockback 20 m",
+  "after_kill": "After Kill at 10.0s, enemy distance: 100m, damage: 1000, knockback: 10m"
 }

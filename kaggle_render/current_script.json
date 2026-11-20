@@ -1,70 +1,71 @@
 {
-  "title": "7 Seconds of Firefighting: The Final Showdown #shorts",
-  "description": "In this epic Free Fire short, discover the secrets behind the final headshot that changed the game!",
+  "title": "7s Before: The Headshot Mystery in Free Fire #shorts",
+  "description": "Close range combat with enemy, tension during Free Fire, headshot hit at 7.5 seconds, and aftermath. Let's uncover the truth behind this headshot!",
   "hook_badge": "7 SECONDS EARLIER",
   "tags": [
     "Free Fire",
-    "Gaming",
-    "Viral",
-    "Shorts"
+    "Close Range Combat",
+    "Headshot",
+    "7.5 seconds",
+    "Tension"
   ],
-  "pinned_comment": "Did you know...?",
+  "pinned_comment": "Leave a comment below if you saw this! 👇",
   "topic": "IMPOSSIBLE FREE FIRE ONE TAP",
   "psychology": [
-    "Pattern Contradiction",
-    "Grandmaster Ego Challenge",
-    "Loss Aversion Near-Death"
+    "50-50 Controversy Trap",
+    "Reverse Cliffhanger",
+    "Ouroboros Loop Hook"
   ],
   "voice_lang": "hi",
   "theme": "GOLDEN",
   "timeline": {
     "kill_at": 7.5,
     "duration": 11.5,
-    "weapon": "P90",
-    "before_7s": "field with grass and trees, enemy distance: 100 meters, damage or knock: 100 damage",
-    "tension_aim": "Tension Aim at 6.0s, enemy distance unknown, potential damage or knock",
-    "headshot_hit": "intense Free Fire combat",
-    "after_kill": "After killing an enemy, the player is in a yellow container area with a red car nearby. The pla"
+    "weapon": "Pistol",
+    "before_7s": "Close range combat with enemy in front of the player's position.",
+    "tension_aim": "Tension during a Free Fire match, aiming at an enemy at a distance of 6 meters, with potential ",
+    "headshot_hit": "Close range, enemy distance 10 meters, headshot hit at 7.5 seconds, damage 1000, knockback 20 m",
+    "after_kill": "After Kill at 10.0s, enemy distance: 100m, damage: 1000, knockback: 10m"
   },
   "segments": [
     {
-      "text": "भाई, रुक, देख, बंदा, खत्म",
-      "en": "Hey, hold up, look, it's closed, it's over...",
+      "text": "हां, आज की टीम तुम्हारी लीड टीम है",
+      "en": "Yea, today's team is your lead team again",
       "sfx": "hit",
       "pace": "fast"
     },
     {
-      "text": "भाई, रुक, देख, बंदा, खत्म",
-      "en": "Hey, hold up, look, it's closed, it's over...",
+      "text": "टू मारने जा रही हैं बुरी तरह तीखी प्रतिबंधित बात है",
+      "en": "They're trying to shoot me at a really bad distance",
       "sfx": "rewind",
       "pace": "normal"
     },
     {
-      "text": "भाई, रुक, देख, बंदा, खत्म",
-      "en": "Hey, hold up, look, it's closed, it's over...",
+      "text": "हां, क्लिमैक्स रीवाउंड 7 सेकंड्स ऐलर्ड",
+      "en": "Yea, climactic rewind 7 seconds earlier",
       "sfx": "whoosh",
       "pace": "normal"
     },
     {
-      "text": "भाई, रुक, देख, बंदा, खत्म",
-      "en": "Hey, hold up, look, it's closed, it's over...",
+      "text": "हां, शांति जोड़ा है, लेकिन दिखता है कि अच्छी तरह नहीं है",
+      "en": "Yea, peace treaty is there, but it's not working out well",
       "sfx": "hit",
       "pace": "slow"
     },
     {
-      "text": "भाई, रुक, देख, बंदा, खत्म",
-      "en": "Hey, hold up, look, it's closed, it's over...",
+      "text": "हां, शांति जोड़ा है, लेकिन दिखता है कि अच्छी तरह नहीं है",
+      "en": "Yea, peace treaty is there, but it's not working out well",
       "sfx": "whoosh",
       "pace": "fast"
     }
   ],
-  "narration": "भाई, रुक, देख, बंदा, खत्म भाई, रुक, देख, बंदा, खत्म भाई, रुक, देख, बंदा, खत्म भाई, रुक, देख, बंदा, खत्म भाई, रुक, देख, बंदा, खत्म",
-  "script": "Hey, hold up, look, it's closed, it's over... Hey, hold up, look, it's closed, it's over... Hey, hold up, look, it's closed, it's over... Hey, hold up, look, it's closed, it's over... Hey, hold up, look, it's closed, it's over...",
+  "narration": "हां, आज की टीम तुम्हारी लीड टीम है टू मारने जा रही हैं बुरी तरह तीखी प्रतिबंधित बात है हां, क्लिमैक्स रीवाउंड 7 सेकंड्स ऐलर्ड हां, शांति जोड़ा है, लेकिन दिखता है कि अच्छी तरह नहीं है हां, शांति जोड़ा है, लेकिन दिखता है कि अच्छी तरह नहीं है",
+  "script": "Yea, today's team is your lead team again They're trying to shoot me at a really bad distance Yea, climactic rewind 7 seconds earlier Yea, peace treaty is there, but it's not working out well Yea, peace treaty is there, but it's not working out well",
   "beat_times": [
     0.0,
-    2.02,
-    4.92,
-    7.81,
-    10.9
+    2.38,
+    7.28,
+    10.78,
+    16.68
   ]
 }
