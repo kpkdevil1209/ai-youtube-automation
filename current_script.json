@@ -1,59 +1,57 @@
 {
-  "theme": "SURVIVAL",
-  "topic": "The Impossible 100 Foot Rogue Wave Sailors Swore Was A Myth",
+  "theme": "MYSTERY",
+  "topic": "Dyatlov Pass: Why Nine Experienced Hikers Cut Their Own Tent",
   "format_type": "SHORTS",
-  "title": "100 Foot Rogue Wave: A Sailor's Legend Unveiled",
-  "description": "ai_prompt: Photorealistic 9:16 cinematic scene of a dark, stormy ocean with towering waves crashing against steel ships, camera swooping in close to the water's edge, capturing the sheer power and ferocity of the waves. search_query: stormy ocean, rogue waves, crashing waves",
+  "title": "The Nine Who Died: A Cold Mountain Horror",
+  "description": "Search_Q: icy mountain, frozen lake, eerie silence. AI_Prompt: A dimly lit mountain peak shrouded in swirling white fog, a lone hiker silhouette in the foreground, camera panning up to reveal the frozen valley below. #FrozenMountainHorror #MountainPanic #SilentNight",
   "tags": [
-    "rogue waves",
-    "ocean storms",
-    "steel ships",
-    "sailor tales",
-    "unveiling myths",
-    "natural wonders"
+    "Dyatlov Pass",
+    "Frozen Mountain Mystery",
+    "Mountain Hiker Deaths",
+    "Alpine Horror"
   ],
-  "pinned_comment": "Did sailors exaggerate the 100-foot rogue waves? #RogueWaveRealityCheck #OceanMythorFact \ud83c\udfdd\ufe0f\ud83d\udca5",
-  "hook_badge": "100 FOOT ROGUE WAVE",
+  "pinned_comment": "Was it fear or logic that led them to their deaths? #DyatlovPassPuzzle",
+  "hook_badge": "WHAT NINE EXPERIENCED HI",
   "beats": [
     {
-      "narration": "100 feet. Steel ships. Water. \ud83d\udca5",
-      "search_query": "stormy ocean, rogue waves, crashing waves",
-      "ai_prompt": "Photorealistic 9:16 cinematic scene: A dark, stormy ocean with towering waves crashing against steel ships, camera swooping in close to the water's edge, capturing the sheer power and ferocity of the waves.",
+      "narration": "FIVE DEADLY COLD NIGHTS...",
+      "search_query": "icy mountain, frozen lake, eerie silence",
+      "ai_prompt": "A dimly lit mountain peak shrouded in swirling white fog, a lone hiker silhouette in the foreground, camera panning up to reveal the frozen valley below.",
       "visual_mode": "ai_video",
       "stock_file": "stock_0.mp4"
     },
     {
-      "narration": "100 feet. Steel ships. Waves. \ud83d\udca5",
-      "search_query": "ocean storms, rogue waves, crashing waves",
-      "ai_prompt": "Photorealistic 9:16 cinematic scene: A dark, stormy ocean with waves reaching 100 feet, camera sweeping across the water's surface, capturing the relentless force of the waves.",
+      "narration": "NINE EXPERIENCED HIKERS...",
+      "search_query": "icy mountains, frozen lakes, frostbite",
+      "ai_prompt": "A hiker standing on a rocky ledge, the camera pans down to reveal his trembling hands, then a close-up of his frostbitten face.",
       "visual_mode": "stock_video",
       "stock_file": "stock_1.mp4"
     },
     {
-      "narration": "Steel ships. Waves. Waves. \ud83d\udca5",
-      "search_query": "ocean storms, rogue waves, crashing waves",
-      "ai_prompt": "Photorealistic 9:16 cinematic scene: Waves reaching 100 feet crashing against steel ships, camera zooming in on the waves' relentless force, capturing the moment of impact.",
+      "narration": "FROZEN TENT, COLD NIGHT...",
+      "search_query": "icy winds, frozen breath, frostbite",
+      "ai_prompt": "A hiker's frozen breath forming visible clouds in the cold air, the camera capturing his struggle to breathe, the tent partially open in the biting wind.",
       "visual_mode": "stock_video",
       "stock_file": "stock_2.mp4"
     },
     {
-      "narration": "100 feet. Steel ships. Waves. \ud83d\udca5",
-      "search_query": "ocean storms, rogue waves, crashing waves",
-      "ai_prompt": "Photorealistic 9:16 cinematic scene: Waves reaching 100 feet crashing against steel ships, camera capturing the moment of impact, the sheer power of nature.",
+      "narration": "THEY CUT THEIR OWN TENTS...",
+      "search_query": "icy winds, frozen breath, frostbite",
+      "ai_prompt": "A hiker's silhouette in the distance, the camera tracking towards the campsite, the tent partially cut with bloodstains visible.",
       "visual_mode": "stock_video",
       "stock_file": "stock_3.mp4"
     },
     {
-      "narration": "Steel ships. Waves. Waves. \ud83d\udca5",
-      "search_query": "ocean storms, rogue waves, crashing waves",
-      "ai_prompt": "Photorealistic 9:16 cinematic scene: Waves reaching 100 feet crashing against steel ships, camera capturing the moment of impact, the sheer power of nature.",
+      "narration": "IN THEIR FINAL MOMENTS...",
+      "search_query": "icy winds, frozen breath, frostbite",
+      "ai_prompt": "A hiker's silhouette in the distance, the camera tracking towards the campsite, the tent partially cut with bloodstains visible. A final, chilling silence.",
       "visual_mode": "ai_video",
       "stock_file": "stock_4.mp4"
     },
     {
-      "narration": "Steel ships. Waves. \ud83d\udca5",
-      "search_query": "ocean storms, rogue waves, crashing waves",
-      "ai_prompt": "Photorealistic 9:16 cinematic scene: Waves reaching 100 feet crashing against steel ships, camera capturing the moment of impact, the sheer power of nature.",
+      "narration": "WHY DID THEY DO IT?...",
+      "search_query": "icy winds, frozen breath, frostbite",
+      "ai_prompt": "A hiker's silhouette in the distance, the camera tracking towards the campsite, the tent partially cut with bloodstains visible. A final, chilling silence.",
       "visual_mode": "stock_video",
       "stock_file": "stock_5.mp4"
     }
