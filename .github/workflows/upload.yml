@@ -140,7 +140,7 @@ jobs:
           fi
           KERNEL_ID=$(python3 -c 'import json; print(json.load(open("kaggle_render/kernel-metadata.json"))["id"])')
           echo "[*] Polling Kaggle GPU Kernel: $KERNEL_ID"
-          for i in $(seq 1 90); do
+          for i in $(seq 1 160); do
             STATUS_OUT=$(kaggle kernels status "$KERNEL_ID" 2>&1 || true)
             echo "[$i/90] $STATUS_OUT"
             if echo "$STATUS_OUT" | grep -qi "complete"; then
