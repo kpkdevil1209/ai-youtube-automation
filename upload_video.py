@@ -85,7 +85,7 @@ def load_metadata():
     shorts_tag = "\n#Shorts #Mystery #Science #Documentary" if "#shorts" not in desc_body.lower() else ""
     description = (
         f"{desc_body}{shorts_tag}\n\n"
-        "Original narrated documentary short with AI-visualized reconstructions and licensed public stock footage."
+        "Original narrated documentary short with AI-visualized reconstructions."
     )[:4800]
 
     return title, description, tags, pin_comment
@@ -93,10 +93,14 @@ def load_metadata():
 
 def calculate_publish_time():
     now_utc = datetime.now(timezone.utc)
-    target_utc = now_utc.replace(hour=13, minute=0, second=0, microsecond=0)
-    if target_utc <= now_utc + timedelta(minutes=15):
-        target_utc += timedelta(days=1)
-    return target_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
+    slots_utc = [14, 19, 23]
+    for day_off in (0, 1):
+        base = now_utc + timedelta(days=day_off)
+        for hr in slots_utc:
+            cand = base.replace(hour=hr, minute=0, second=0, microsecond=0)
+            if cand >= now_utc + timedelta(minutes=20):
+                return cand.strftime("%Y-%m-%dT%H:%M:%SZ")
+    return (now_utc + timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def execute_upload(youtube, body):
@@ -119,7 +123,7 @@ def upload_video_to_youtube():
     publish_at = calculate_publish_time()
 
     print(f"[*] Title: {title}")
-    print(f"[*] Scheduled (18:00 PKT): {publish_at}")
+    print(f"[*] Scheduled (US/UK Prime UTC): {publish_at}")
 
     body = {
         "snippet": {
