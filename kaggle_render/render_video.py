@@ -5,6 +5,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 
 os.environ["HF_HOME"] = "/tmp/hf_cache"
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -34,53 +35,73 @@ def ensure_ai_packages():
     try:
         from diffusers import AutoencoderKLWan, WanPipeline  # noqa: F401
         import ftfy  # noqa: F401
+        import hf_transfer  # noqa: F401
         return
     except Exception:
-        print("[*] Installing diffusers/WanPipeline dependencies on Kaggle...", flush=True)
+        print("[*] Installing diffusers/WanPipeline + hf_transfer on Kaggle...", flush=True)
         subprocess.check_call([
             sys.executable, "-m", "pip", "install", "-q", "-U",
             "diffusers>=0.32.2", "transformers>=4.49.0", "accelerate>=1.1.1",
-            "ftfy", "sentencepiece", "imageio-ffmpeg",
+            "ftfy", "sentencepiece", "imageio-ffmpeg", "hf_transfer",
         ])
 
 
-def generate_wan_clips(beats, out_dir):
+def load_wan_pipeline(AutoencoderKLWan, WanPipeline, torch):
+    try:
+        import hf_transfer  # noqa: F401
+        os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "1"
+    except Exception:
+        os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "0"
+
+    try:
+        vae = AutoencoderKLWan.from_pretrained(MODEL_ID, subfolder="vae", torch_dtype=torch.float16)
+        pipe = WanPipeline.from_pretrained(MODEL_ID, vae=vae, torch_dtype=torch.float16)
+        return vae, pipe
+    except Exception:
+        os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "0"
+        vae = AutoencoderKLWan.from_pretrained(MODEL_ID, subfolder="vae", torch_dtype=torch.float16)
+        pipe = WanPipeline.from_pretrained(MODEL_ID, vae=vae, torch_dtype=torch.float16)
+        return vae, pipe
+
+
+def generate_wan_hook(beats, out_dir):
     ai_files = {}
     import torch
     if not torch.cuda.is_available():
-        print("[!] No CUDA GPU detected; skipping Wan2.1 and using stock clips.", flush=True)
+        print("[!] No CUDA GPU detected; using stock clips.", flush=True)
         return ai_files
 
     try:
+        t0 = time.time()
         ensure_ai_packages()
         from diffusers import AutoencoderKLWan, WanPipeline
         from diffusers.utils import export_to_video
 
         print(f"[*] Loading {MODEL_ID} on {torch.cuda.get_device_name(0)}...", flush=True)
-        vae = AutoencoderKLWan.from_pretrained(MODEL_ID, subfolder="vae", torch_dtype=torch.float16)
-        pipe = WanPipeline.from_pretrained(MODEL_ID, vae=vae, torch_dtype=torch.float16)
+        vae, pipe = load_wan_pipeline(AutoencoderKLWan, WanPipeline, torch)
         pipe.enable_model_cpu_offload()
+        print(f"[+] Model ready in {time.time() - t0:.1f}s", flush=True)
 
+        beat0 = beats[0]
+        text_src = beat0.get("ai_prompt") or beat0.get("narration") or "dark deep ocean abyss"
+        prompt = text_src + ", photorealistic 35mm dark cinema, moody volumetric lighting, fluid motion"
         neg = "blurry, low quality, text, watermark, subtitles, deformed faces, extra fingers, bright cartoon"
-        for idx, beat in enumerate(beats):
-            if beat.get("visual_mode") != "ai_video":
-                continue
-            text_src = beat.get("ai_prompt") or beat.get("narration") or "dark deep ocean abyss"
-            prompt = text_src + ", photorealistic 35mm dark cinema, moody volumetric lighting, fluid motion"
-            print(f"[*] Generating Real AI Video for Beat {idx} (480x832)...", flush=True)
-            frames = pipe(
-                prompt=prompt[:350],
-                negative_prompt=neg,
-                height=832,
-                width=480,
-                num_frames=49,
-                num_inference_steps=26,
-                guidance_scale=5.0,
-            ).frames[0]
-            out_mp4 = os.path.join(out_dir, f"ai_{idx}.mp4")
-            export_to_video(frames, out_mp4, fps=16)
-            ai_files[idx] = out_mp4
-            print(f"[+] AI Video Beat {idx} saved!", flush=True)
+
+        t1 = time.time()
+        print("[*] Generating Fast Hero AI Video for Beat 0 (480x832, 33 frames, 20 steps)...", flush=True)
+        frames = pipe(
+            prompt=prompt[:350],
+            negative_prompt=neg,
+            height=832,
+            width=480,
+            num_frames=33,
+            num_inference_steps=20,
+            guidance_scale=5.0,
+        ).frames[0]
+        out_mp4 = os.path.join(out_dir, "ai_0.mp4")
+        export_to_video(frames, out_mp4, fps=16)
+        ai_files[0] = out_mp4
+        print(f"[+] Hero AI Video Beat 0 saved in {time.time() - t1:.1f}s!", flush=True)
 
         del pipe, vae
         gc.collect()
@@ -118,17 +139,16 @@ def main():
     srt_path = os.path.join(assets, "subtitles.srt")
     beats = script.get("beats") or script.get("segments") or []
     if not beats:
-        raise RuntimeError("No beats found in current_script.json (check Step 2/3 or Kaggle dataset sync)")
+        raise RuntimeError("No beats found in current_script.json")
 
     beat_times = script.get("beat_times")
     if not beat_times or len(beat_times) != len(beats):
         tot = audio_duration(audio_path)
         step = tot / len(beats)
         beat_times = [{"idx": i, "start": round(i * step, 3), "end": round((i + 1) * step, 3)} for i in range(len(beats))]
-        print(f"[!] Computed fallback beat_times ({tot:.2f}s / {len(beats)} beats)", flush=True)
 
     badge = "".join(c for c in str(script.get("hook_badge", "CLASSIFIED")) if c.isalnum() or c in " .,-")[:24]
-    ai_files = generate_wan_clips(beats, TMP_DIR)
+    ai_files = generate_wan_hook(beats, TMP_DIR)
 
     stock_fallback = sorted(glob.glob(os.path.join(assets, "stock_*.mp4")))
     if not stock_fallback and os.path.exists(os.path.join(assets, "raw_gameplay.mp4")):
@@ -145,14 +165,15 @@ def main():
             elif stock_fallback:
                 src = stock_fallback[i % len(stock_fallback)]
             else:
-                raise FileNotFoundError("No stock or AI video file available for rendering")
+                raise FileNotFoundError("No stock or AI video file available")
 
         piece = os.path.join(TMP_DIR, f"piece_{i}.mp4")
-        slow = "setpts=1.18*PTS," if i in ai_files else ""
+        slow = "setpts=1.45*PTS," if i in ai_files else ""
+        flash = ":brightness='0.24*between(t,0,0.16)':eval=frame" if i == 4 else ":brightness=-0.03"
         vf = (
             f"{slow}scale=1160:2062:force_original_aspect_ratio=increase:flags=lanczos,"
             "crop=1080:1920:x='(iw-ow)/2+16*sin(t*1.3)':y='(ih-oh)/2+12*cos(t*1.0)',"
-            "eq=contrast=1.12:saturation=0.90:brightness=-0.03,unsharp=5:5:0.6:5:5:0.15,fps=30"
+            f"eq=contrast=1.12:saturation=0.90{flash},unsharp=5:5:0.6:5:5:0.15,fps=30"
         )
         subprocess.run([
             "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
