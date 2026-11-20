@@ -2,8 +2,8 @@
   "kill_at": 7.5,
   "duration": 11.5,
   "weapon": "Rifle",
-  "before_7s": "Team strategy meeting, players discussing tactics and weapon selection.",
-  "tension_aim": "Tension during a Free Fire match, aiming at an enemy at a distance of 6 meters, with potential ",
-  "headshot_hit": "Headshot hit at 7.5 seconds, weapon used: Rifle, enemy distance: 100 meters, damage: 1000 damag",
-  "after_kill": "After Kill at 10.0s, enemy distance: 150m, damage: 1000, knock: 500"
+  "before_7s": "Targeting an enemy in the distance, aiming for a precise shot.",
+  "tension_aim": "Targeting an enemy in the distance, aiming for precision and accuracy.",
+  "headshot_hit": "intense Free Fire combat",
+  "after_kill": "A player is aiming through a scope at an enemy in the distance. The enemy is at a distance of 4"
 }
