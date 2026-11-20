@@ -1,8 +1,8 @@
-name: DEVIL UNIVERSE - AI Documentary Pipeline
+name: DEVIL UNIVERSE - Full Kaggle AI Shorts Engine
 
 on:
   schedule:
-    - cron: '0 12 * * *' # 17:00 PKT (18:00 PKT upload se pehle ready)
+    - cron: '0 13,18,23 * * *' # 3x Daily US/UK Global Prime-Time
   workflow_dispatch:
 
 permissions:
@@ -80,25 +80,25 @@ jobs:
             python -u empire_safety_shield.py
           fi
 
-      - name: Step 1 - Viral Mystery Topic Scout
+      - name: Step 1 - Psych Strategy & Viral Topic Scout
         run: python -u viral_trend_agent.py
 
-      - name: Step 2 - AI Scriptwriter & Real Video Harvester (Pixabay + NASA)
-        env:
-          PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
+      - name: Step 2 - AI 12-Shot Documentary Scriptwriter
         run: |
           pgrep -x ollama >/dev/null || (nohup ollama serve >/tmp/ollama.log 2>&1 & sleep 4)
+          rm -f current_script.json final_audio.wav subtitles* final_output.mp4
           python -u generate_script.py
 
-      - name: Step 3 - Human Documentary Voice (Kokoro-82M) & Sound Design
+      - name: Step 3 - Kokoro-82M Voice, Dead-Air SFX & Color-Pop ASS Captions
         run: python -u generate_audio.py
 
-      - name: Step 4 - Save Topic History
+      - name: Step 4 - Clean Stale Repo Assets & Save History
         run: |
+          rm -f kaggle_render/raw_gameplay.mp4 kaggle_render/final_audio.wav kaggle_render/current_script.json kaggle_render/subtitles*
           git config --global user.name "DEVIL Pipeline Bot"
           git config --global user.email "bot@devil-insanity.local"
-          git add posted_history.json current_script.json trending_topic.json 2>/dev/null || true
-          git commit -m "Update documentary history [skip ci]" || echo "Nothing new to commit"
+          git add -A posted_history.json trending_topic.json kaggle_render/
+          git commit -m "Clean stale assets & save history [skip ci]" || echo "Nothing new to commit"
           git pull --rebase origin main || true
           git push origin main || true
 
@@ -116,16 +116,15 @@ jobs:
           fi
           chmod 600 ~/.kaggle/kaggle.json
 
-      - name: Step 6 - Kaggle T4 GPU Render (Wan2.1 Real AI Video + Cinema Edit)
+      - name: Step 6 - Kaggle T4 GPU Full AI Video & Cinema Render
         run: |
           rm -rf kaggle_assets && mkdir -p kaggle_assets
           cp -f final_audio.wav current_script.json kaggle_assets/
-          cp -f subtitles.srt subtitles_en.srt kaggle_assets/ 2>/dev/null || true
-          cp -f stock_clips/*.mp4 kaggle_assets/ 2>/dev/null || true
+          cp -f subtitles.ass subtitles.srt subtitles_en.srt kaggle_assets/ 2>/dev/null || true
           python3 -c 'import json, os; u=json.load(open(os.path.expanduser("~/.kaggle/kaggle.json")))["username"]; json.dump({"title":"devil-insanity-assets","id":f"{u}/devil-insanity-assets","licenses":[{"name":"CC0-1.0"}]}, open("kaggle_assets/dataset-metadata.json","w"), indent=2)'
           kaggle datasets version -p kaggle_assets -m "Run ${{ github.run_number }}-${{ github.run_attempt }}" --dir-mode zip || kaggle datasets create -p kaggle_assets --dir-mode zip
-          echo "[*] Waiting 30s for Kaggle dataset indexing..."
-          sleep 30
+          echo "[*] Waiting 50s for Kaggle dataset indexing..."
+          sleep 50
 
           python3 -c 'import json, os, re; u=json.load(open(os.path.expanduser("~/.kaggle/kaggle.json")))["username"]; p="kaggle_render/kernel-metadata.json"; m=json.load(open(p)); s=re.sub(r"[^a-z0-9-]+","-",m.get("id",f"{u}/devil-video-render-engine").split("/")[-1].lower()).strip("-") or "devil-video-render-engine"; m["id"]=f"{u}/{s}"; m["title"]=s; m["enable_gpu"]=True; m["enable_internet"]=True; m["dataset_sources"]=[f"{u}/devil-insanity-assets"]; json.dump(m,open(p,"w"),indent=2); print("Synced:",m["id"],"GPU:",m["enable_gpu"])'
           set +e
@@ -134,7 +133,7 @@ jobs:
           set -e
           echo "$PUSH_OUT"
           if [ $PUSH_RC -ne 0 ] || echo "$PUSH_OUT" | grep -qi "409"; then
-            NEW_SLUG="devil-doc-v${{ github.run_number }}-${{ github.run_attempt }}-$(date +%s | tail -c 5)"
+            NEW_SLUG="devil-ai-v${{ github.run_number }}-${{ github.run_attempt }}-$(date +%s | tail -c 5)"
             python3 -c 'import json, os, sys; ns=sys.argv[1]; u=json.load(open(os.path.expanduser("~/.kaggle/kaggle.json")))["username"]; p="kaggle_render/kernel-metadata.json"; m=json.load(open(p)); m["id"]=f"{u}/{ns}"; m["title"]=ns; m["enable_gpu"]=True; m["enable_internet"]=True; m["dataset_sources"]=[f"{u}/devil-insanity-assets"]; json.dump(m,open(p,"w"),indent=2)' "$NEW_SLUG"
             kaggle kernels push -p kaggle_render
           fi
@@ -142,7 +141,7 @@ jobs:
           echo "[*] Polling Kaggle GPU Kernel: $KERNEL_ID"
           for i in $(seq 1 160); do
             STATUS_OUT=$(kaggle kernels status "$KERNEL_ID" 2>&1 || true)
-            echo "[$i/90] $STATUS_OUT"
+            echo "[$i/160] $STATUS_OUT"
             if echo "$STATUS_OUT" | grep -qi "complete"; then
               break
             fi
