@@ -1,68 +1,80 @@
 {
-  "title": "Punchy English #Shorts",
-  "description": "Get ready for the intense action!",
-  "hook_badge": "BEAT1",
+  "title": "7S BEFORE: THE HEADSHOT MIRACLE THAT MADE THE ENEMY CRASH #shorts",
+  "description": "Watch as a Free Fire pro takes on a near-miss headshot, hitting at 7.5 seconds! #FreeFireShorts",
+  "hook_badge": "7 SECONDS EARLIER",
   "tags": [
-    "#freefire #shorts",
-    "#action",
-    "#gaming",
-    "#shootout",
-    "#p90",
-    "#punchyenglish"
+    "Free Fire",
+    "Gaming",
+    "Headshot",
+    "Pro Gameplay",
+    "Gamer",
+    "Viral Gaming",
+    "Gaming Short"
   ],
-  "pinned_comment": "Who else is ready for this intense shootout?",
-  "topic": "IMPOSSIBLE FREE FIRE ONE TAP BREAKDOWN",
-  "format": "0.25x Slow-Mo Secret",
+  "pinned_comment": "Wow! What a incredible headshot! Do you have any tips for getting that kind of accuracy? #FreeFireGaming",
+  "topic": "IMPOSSIBLE FREE FIRE ONE TAP",
+  "psychology": [
+    "Micro-Second Secret",
+    "Forbidden Unwritten Rule",
+    "Ouroboros Loop Hook"
+  ],
   "voice_lang": "hi",
-  "theme": "CYBER",
+  "theme": "ICE",
   "timeline": {
-    "kill_at": 8.5,
-    "duration": 11.0,
-    "weapon": "P90",
-    "before_setup": "field with trees and buildings in the background, enemy in the distance, player moving towards ",
-    "tension_aim": "mid-air jump, aiming at enemy player in the distance.",
-    "headshot_hit": "Enemy in a building, shooting at the player's character, headshot hit at 8.5 seconds.",
-    "aftermath": "enemy in the distance, moving towards the player's position, preparing to attack."
+    "kill_at": 7.5,
+    "duration": 11.5,
+    "weapon": "Rifle",
+    "before_7s": "Team strategy meeting, players discussing tactics and weapon selection.",
+    "tension_aim": "Tension during a Free Fire match, aiming at an enemy at a distance of 6 meters, with potential ",
+    "headshot_hit": "Headshot hit at 7.5 seconds, weapon used: Rifle, enemy distance: 100 meters, damage: 1000 damag",
+    "after_kill": "After Kill at 10.0s, enemy distance: 150m, damage: 1000, knock: 500"
   },
   "segments": [
     {
-      "en": "Player jumps into frame, aiming at enemy in the distance.",
-      "pace": "fast",
+      "text": "भाई, रुक, देख, बंदा, खत्म",
+      "en": "Hey, let's look closer, you're dead, game over, done.",
       "sfx": "hit",
-      "text": "खिलाड़ी दूर से दुश्मन पर निशाना साधते हुए फ्रेम में कूदता है।"
+      "pace": "fast"
     },
     {
-      "en": "Player lands the jump and fires at enemy.",
-      "pace": "normal",
+      "text": "भाई, रुक, देख, बंदा, खत्म",
+      "en": "That was just a near-miss, how did that headshot connect?",
+      "sfx": "rewind",
+      "pace": "normal"
+    },
+    {
+      "text": "भाई, रुक, देख, बंदा, खत्म",
+      "en": "I'm not sure, but it's pretty cool how he hit that target.",
       "sfx": "whoosh",
-      "text": "खिलाड़ी छलांग लगाता है और दुश्मन पर फायर करता है।"
+      "pace": "normal"
     },
     {
-      "en": "Enemy takes a headshot, but the player is safe.",
-      "pace": "normal",
-      "sfx": "whoosh",
-      "text": "दुश्मन सिर पर गोली मारता है, लेकिन खिलाड़ी सुरक्षित है।"
-    },
-    {
-      "en": "Enemy tries to attack, but the player is ready.",
-      "pace": "slow",
+      "text": "भाई, रुक, देख, बंदा, खत्म",
+      "en": "Wow, that was so close! How did he do that?",
       "sfx": "hit",
-      "text": "दुश्मन हमला करने की कोशिश करता है, लेकिन खिलाड़ी तैयार है।"
+      "pace": "slow"
     },
     {
-      "en": "Player lands another jump and fires again, this time hitting the enemy.",
-      "pace": "fast",
+      "text": "भाई, रुक, देख, बंदा, खत्म",
+      "en": "That was a perfect shot! I can't believe it.",
       "sfx": "whoosh",
-      "text": "खिलाड़ी एक और छलांग लगाता है और फिर से फायर करता है, इस बार दुश्मन को मारता है।"
+      "pace": "fast"
+    },
+    {
+      "text": "भाई, रुक, देख, बंदा, खत्म",
+      "en": "What a incredible headshot! I can't believe it.",
+      "sfx": "whoosh",
+      "pace": "normal"
     }
   ],
-  "narration": "खिलाड़ी दूर से दुश्मन पर निशाना साधते हुए फ्रेम में कूदता है। खिलाड़ी छलांग लगाता है और दुश्मन पर फायर करता है। दुश्मन सिर पर गोली मारता है, लेकिन खिलाड़ी सुरक्षित है। दुश्मन हमला करने की कोशिश करता है, लेकिन खिलाड़ी तैयार है। खिलाड़ी एक और छलांग लगाता है और फिर से फायर करता है, इस बार दुश्मन को मारता है।",
-  "script": "Player jumps into frame, aiming at enemy in the distance. Player lands the jump and fires at enemy. Enemy takes a headshot, but the player is safe. Enemy tries to attack, but the player is ready. Player lands another jump and fires again, this time hitting the enemy.",
+  "narration": "भाई, रुक, देख, बंदा, खत्म भाई, रुक, देख, बंदा, खत्म भाई, रुक, देख, बंदा, खत्म भाई, रुक, देख, बंदा, खत्म भाई, रुक, देख, बंदा, खत्म भाई, रुक, देख, बंदा, खत्म",
+  "script": "Hey, let's look closer, you're dead, game over, done. That was just a near-miss, how did that headshot connect? I'm not sure, but it's pretty cool how he hit that target. Wow, that was so close! How did he do that? That was a perfect shot! I can't believe it. What a incredible headshot! I can't believe it.",
   "beat_times": [
     0.0,
-    3.49,
-    6.83,
-    10.18,
-    14.23
+    2.02,
+    4.92,
+    7.81,
+    10.9,
+    13.7
   ]
 }
