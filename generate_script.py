@@ -1,4 +1,4 @@
-import os, sys, json, time, socket, random, subprocess, urllib.parse, requests
+import os, re, sys, json, time, socket, random, subprocess, urllib.parse, requests
 import verify_freefire_agent as vfa
 
 try: sys.stdout.reconfigure(line_buffering=True)
@@ -116,7 +116,8 @@ def harvest(brief):
         try:
             r = requests.post("https://gql.twitch.tv/gql", json={"query": gql, "variables": {"id": "502732", "f": per}},
                               headers={"Client-Id": "kimne78kx3ncx6brgo4mv6wki5h1ko", "User-Agent": UA}, timeout=12)
-            edges = (r.json().get("data") or {}).get("game", {}).get("clips", {}).get("edges", [])
+            game_node = ((r.json().get("data") or {}).get("game")) or {}
+            edges = ((game_node.get("clips")) or {}).get("edges") or []
             print(f"    [Twitch {per}] {len(edges)} clips")
             random.shuffle(edges)
             tried = 0
@@ -189,18 +190,26 @@ def to_hindi(text):
     except Exception: return text
 
 
-def cap_segments(raw_segs, max_words=58):
-    out, total = [], 0
+def normalize_beats(raw_segs, max_words=60):
+    words_all = []
+    out = []
     for s in (raw_segs or []):
         en = str((s.get("en") or s.get("text")) if isinstance(s, dict) else s).strip()
         if not en: continue
-        pace = s.get("pace", "normal") if isinstance(s, dict) and s.get("pace") in ["fast", "normal", "slow"] else "normal"
-        sfx = s.get("sfx", "whoosh") if isinstance(s, dict) and s.get("sfx") in ["hit", "whoosh", "none"] else "whoosh"
-        w = len(en.split())
-        if total + w <= max_words or not out:
-            out.append({"en": en, "pace": pace, "sfx": sfx}); total += w
+        w = en.split()
+        words_all.extend(w)
+        out.append({"en": en, "pace": "normal", "sfx": "whoosh"})
+    if len(out) < 4 and len(words_all) >= 20:
+        words_all = words_all[:max_words]
+        chunk = max(4, (len(words_all) + 4) // 5)
+        out = [{"en": " ".join(words_all[i:i+chunk]), "pace": "normal", "sfx": "whoosh"} for i in range(0, len(words_all), chunk)][:5]
+    capped, total = [], 0
+    for s in out:
+        n = len(s["en"].split())
+        if total + n <= max_words or not capped:
+            capped.append(s); total += n
         else: break
-    return out
+    return capped
 
 
 def write_script(brief, tl):
@@ -212,39 +221,37 @@ def write_script(brief, tl):
 
     scenes = f"5s Before Shot: {tl.get('before_setup','')}. Tension: {tl.get('tension_aim','')}. Climax Hit: {tl.get('headshot_hit','')}. Aftermath: {tl.get('aftermath','')}. Weapon: {tl.get('weapon','unknown')}."
     prompt = (
-        f"You are an elite viral gaming YouTube Shorts scriptwriter. Write a TIGHT 19-second Climax-First script in PUNCHY GLOBAL ENGLISH for THIS exact Free Fire clip: {scenes} "
-        f"Beat 1 (0.0s Flash-Forward Teaser, 8-10 words): Instant shock hook about this exact headshot (NEVER say Hello, Guys, Today, Welcome, 99% players). "
-        f"Beat 2 (5s Before Setup, 9-11 words): Rewind five seconds earlier and explain his risky position. "
-        f"Beat 3 (Crosshair Trap, 9-11 words): Point out the enemy mistake right before firing. "
-        f"Beat 4 (0.25x Climax Slow-Mo, 9-11 words): Freeze on impact and reveal how the headshot connected. "
-        f"Beat 5 (Loop Ending, 8-10 words): Debate hook that loops straight back into Beat 1. "
-        f"Return JSON ONLY: title (high-CTR English max 72 chars ending #shorts), description (2 English lines + #freefire #freefiremax #shorts), "
-        f"hook_badge (max 4 uppercase words e.g. '0.25X IMPOSSIBLE SHOT?'), tags (6 English tags), pinned_comment (1 viral skill-vs-hack debate question), segments (EXACTLY 5 objects)."
+        f"Write a TIGHT 19-second Climax-First Free Fire YouTube Short JSON in PUNCHY ENGLISH matching this clip: {scenes} "
+        f"Rules: segments MUST be an array of EXACTLY 5 separate objects (8-11 words per 'en' field, ~48 words total). "
+        f"Beat 1 (0.0s hook, NEVER Hello/Guys/Today): e.g. 'Stop scrolling! How did he land this bridge shot?!' "
+        f"Beat 2: Rewind 5s before on the bridge. Beat 3: Enemy target mistake. Beat 4: 0.25x slow-mo headshot impact. Beat 5: Debate loop back to Beat 1. "
+        f"Return JSON with title (max 72 chars + #shorts), description (2 English lines + #freefire #shorts), hook_badge (3 uppercase words), tags (6 strings), pinned_comment (1 question), segments (5 dicts: en, pace, sfx)."
     )
 
     best_p, best_segs, best_wc = None, [], 0
-    for i in range(3):
+    for i in range(4):
         try:
             print(f"[*] Calling {model} (attempt {i+1})...")
             r = requests.post(f"{OLLAMA_BASE}/api/generate",
                               json={"model": model, "prompt": prompt, "stream": False, "format": SCRIPT_SCHEMA, "keep_alive": 0,
-                                    "options": {"num_ctx": 1536, "num_predict": 520, "temperature": 0.45}}, timeout=95)
+                                    "options": {"num_ctx": 1536, "num_predict": 720, "temperature": 0.4}}, timeout=95)
             if r.status_code != 200: print(f"[!] Ollama {r.status_code}"); time.sleep(2); continue
             p = json.loads(r.json().get("response", "").strip())
-            segs = cap_segments(p.get("segments"), max_words=58)
+            segs = normalize_beats(p.get("segments"), max_words=60)
             wc = sum(len(x["en"].split()) for x in segs)
             print(f"    [Draft {i+1}] {len(segs)} beats | {wc} EN words")
-            if not best_p or abs(wc - 48) < abs(best_wc - 48): best_p, best_segs, best_wc = p, segs, wc
-            if 36 <= wc <= 58 and len(segs) >= 4: break
+            if wc > best_wc and wc >= 28: best_p, best_segs, best_wc = p, segs, wc
+            elif not best_p: best_p, best_segs, best_wc = p, segs, wc
+            if 36 <= wc <= 60 and len(segs) >= 4: break
         except Exception as e: print(f"[!] Ollama retry {i+1}: {e}"); time.sleep(2)
 
-    if not best_p or best_wc < 18: raise RuntimeError("FATAL: Ollama script failed.")
+    if not best_p or best_wc < 28: raise RuntimeError(f"FATAL: Ollama script too short ({best_wc} words).")
     for idx, s in enumerate(best_segs):
         s["text"] = to_hindi(s["en"])
         s["sfx"] = "hit" if idx in [0, 3] else "whoosh"
         s["pace"] = "fast" if idx in [0, 4] else ("slow" if idx == 3 else "normal")
 
-    title = str(best_p.get("title") or "How Did This 1 HP Headshot Even Hit? #shorts").replace("<", "").replace(">", "").strip()[:95]
+    title = str(best_p.get("title") or "How Did This Bridge Headshot Even Hit? #shorts").replace("<", "").replace(">", "").strip()[:95]
     if "#shorts" not in title.lower(): title = (title[:85] + " #shorts").strip()
     desc = str(best_p.get("description") or "Wait for the 0.25x forensic headshot breakdown!\n#freefire #freefiremax #shorts #gaming").replace("<", "").replace(">", "")
     badge = re.sub(r"[^A-Za-z0-9 .!?/-]", "", str(best_p.get("hook_badge") or "0.25X CLIMAX ANALYSIS")).upper().strip()[:28]
