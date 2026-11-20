@@ -6,7 +6,6 @@ import subprocess
 import sys
 import tempfile
 import requests
-from PIL import Image, ImageChops, ImageFilter, ImageStat
 
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434/api/chat")
 if not OLLAMA_URL.endswith("/api/chat"):
@@ -54,7 +53,7 @@ def check_audio_local(path):
     return float(m.group(1))
 
 
-def extract_frame(path, ts, out_jpg, size=384):
+def extract_frame_jpg(path, ts, out_jpg, size=384):
     vf = f"scale={size}:{size}:force_original_aspect_ratio=decrease"
     cmd = [
         "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
@@ -64,31 +63,52 @@ def extract_frame(path, ts, out_jpg, size=384):
     subprocess.run(cmd, check=True)
 
 
+def extract_gray_bytes(path, ts, w=160, h=160):
+    cmd = [
+        "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+        "-ss", f"{ts:.2f}", "-i", path, "-vframes", "1",
+        "-vf", f"scale={w}:{h}", "-f", "rawvideo", "-pix_fmt", "gray", "pipe:1",
+    ]
+    return subprocess.check_output(cmd)
+
+
 def quality_and_motion(path, dur):
-    points = [max(0.5, dur * p) for p in (0.12, 0.30, 0.50, 0.70, 0.88)]
-    sharps, brights, imgs = [], [], []
-    with tempfile.TemporaryDirectory() as tmp:
-        for i, ts in enumerate(points, 1):
-            jpg = os.path.join(tmp, f"q_{i}.jpg")
-            extract_frame(path, ts, jpg, size=480)
-            im = Image.open(jpg).convert("L")
-            edges = im.filter(ImageFilter.FIND_EDGES)
-            sharp = float(ImageStat.Stat(edges).var[0])
-            bright = float(ImageStat.Stat(im).mean[0])
-            sharps.append(sharp)
-            brights.append(bright)
-            imgs.append(im.resize((128, 128)))
-            print(f"[Quality {i}/5 @ {ts:.1f}s] sharp={sharp:.1f} | bright={bright:.1f}", flush=True)
-        diffs = [
-            float(ImageStat.Stat(ImageChops.difference(imgs[k], imgs[k + 1])).mean[0])
-            for k in range(len(imgs) - 1)
-        ]
-    avg_sharp = sum(sharps) / len(sharps)
+    w, h = 160, 160
+    expected = w * h
+    points = [min(max(0.3, dur * p), max(0.3, dur - 0.5)) for p in (0.12, 0.30, 0.50, 0.70, 0.88)]
+    edges, brights, frames = [], [], []
+
+    for i, ts in enumerate(points, 1):
+        raw = extract_gray_bytes(path, ts, w, h)
+        if len(raw) < expected:
+            continue
+        bright = sum(raw[:expected]) / expected
+        edge_sum = 0
+        for y in range(1, h - 1):
+            row = y * w
+            for x in range(1, w - 1):
+                idx = row + x
+                edge_sum += abs(raw[idx + 1] - raw[idx - 1]) + abs(raw[idx + w] - raw[idx - w])
+        edge_score = edge_sum / ((w - 2) * (h - 2))
+        edges.append(edge_score)
+        brights.append(bright)
+        frames.append(raw[:expected])
+        print(f"[Quality {i}/5 @ {ts:.1f}s] edge={edge_score:.1f} | bright={bright:.1f}", flush=True)
+
+    if len(frames) < 2:
+        raise RuntimeError("QA FAIL: Could not decode enough frames")
+
+    diffs = [
+        sum(abs(a - b) for a, b in zip(frames[k], frames[k + 1])) / expected
+        for k in range(len(frames) - 1)
+    ]
+    avg_edge = sum(edges) / len(edges)
     avg_bright = sum(brights) / len(brights)
     avg_motion = sum(diffs) / len(diffs)
-    print(f"[QA Motion] avg_diff={avg_motion:.2f} | avg_sharp={avg_sharp:.1f} | avg_bright={avg_bright:.1f}", flush=True)
-    if avg_sharp < 40.0:
-        raise RuntimeError(f"QA FAIL: Blurry render (sharp={avg_sharp:.1f})")
+    print(f"[QA Motion] avg_diff={avg_motion:.2f} | avg_edge={avg_edge:.1f} | avg_bright={avg_bright:.1f}", flush=True)
+
+    if avg_edge < 5.0:
+        raise RuntimeError(f"QA FAIL: Blurry or blank render (edge={avg_edge:.1f})")
     if avg_bright < 18.0:
         raise RuntimeError(f"QA FAIL: Too dark or black video (bright={avg_bright:.1f})")
     if avg_motion < 1.5:
@@ -98,7 +118,7 @@ def quality_and_motion(path, dur):
 def ask_rendered_qa_frame(path, ts):
     with tempfile.TemporaryDirectory() as tmp:
         jpg = os.path.join(tmp, "v.jpg")
-        extract_frame(path, ts, jpg, size=384)
+        extract_frame_jpg(path, ts, jpg, size=384)
         with open(jpg, "rb") as f:
             b64 = base64.b64encode(f.read()).decode("utf-8")
     prompt = (
@@ -152,7 +172,7 @@ def run_qa(target="final_output.mp4"):
     check_ratios = (0.25, 0.55, 0.40)
     passed = False
     for idx, ratio in enumerate(check_ratios, 1):
-        ts = max(0.5, dur * ratio)
+        ts = min(max(0.5, dur * ratio), max(0.5, dur - 0.5))
         ok, conf, note = ask_rendered_qa_frame(target, ts)
         print(f"[QA Vision {idx}/3 @ {ts:.1f}s] ok={ok} | conf={conf}% | '{note}'", flush=True)
         if ok and conf >= 45:
