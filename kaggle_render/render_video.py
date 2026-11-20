@@ -1,4 +1,5 @@
 import gc
+import importlib.util
 import json
 import os
 import shutil
@@ -33,18 +34,14 @@ def audio_duration(path):
 
 
 def ensure_ai_packages():
-    try:
-        from diffusers import AutoencoderKLWan, WanPipeline, StableDiffusionXLPipeline  # noqa: F401
-        import ftfy  # noqa: F401
-        import hf_transfer  # noqa: F401
+    if importlib.util.find_spec("hf_transfer") and importlib.util.find_spec("ftfy"):
         return
-    except Exception:
-        print("[*] Installing diffusers/Wan/SDXL + hf_transfer on Kaggle...", flush=True)
-        subprocess.check_call([
-            sys.executable, "-m", "pip", "install", "-q", "-U",
-            "diffusers>=0.32.2", "transformers>=4.49.0", "accelerate>=1.1.1",
-            "ftfy", "sentencepiece", "imageio-ffmpeg", "hf_transfer", "safetensors",
-        ])
+    print("[*] Installing diffusers/Wan/SDXL + hf_transfer on Kaggle...", flush=True)
+    subprocess.check_call([
+        sys.executable, "-m", "pip", "install", "-q", "-U",
+        "diffusers>=0.32.2", "transformers>=4.49.0", "accelerate>=1.1.1",
+        "ftfy", "sentencepiece", "imageio-ffmpeg", "hf_transfer", "safetensors",
+    ])
 
 
 def enable_fast_hf(flag=True):
@@ -60,7 +57,7 @@ def enable_fast_hf(flag=True):
 
 def generate_sdxl_scenes(beats, out_dir):
     import torch
-    from diffusers import EulerDiscreteScheduler, StableDiffusionXLPipeline, UNet2DConditionModel, AutoPipelineForText2Image
+    from diffusers import EulerDiscreteScheduler, StableDiffusionXLPipeline, UNet2DConditionModel
     from huggingface_hub import hf_hub_download
     from safetensors.torch import load_file
 
@@ -78,7 +75,7 @@ def generate_sdxl_scenes(beats, out_dir):
     except Exception as e:
         print(f"[!] SDXL-Lightning fallback to SDXL-Turbo ({e})", flush=True)
         use_turbo = True
-        pipe = AutoPipelineForText2Image.from_pretrained(SDXL_TURBO, torch_dtype=torch.float16, variant="fp16").to("cuda")
+        pipe = StableDiffusionXLPipeline.from_pretrained(SDXL_TURBO, torch_dtype=torch.float16, variant="fp16").to("cuda")
 
     neg = "text, watermark, subtitles, cartoon, bright cheerful, deformed fingers, blurry"
     w, h = (576, 1024) if use_turbo else (768, 1344)
