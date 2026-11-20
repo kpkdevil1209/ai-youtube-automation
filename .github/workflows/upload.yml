@@ -1,8 +1,8 @@
-name: DEVIL INSANITY - Autonomous Free Fire Pipeline
+name: DEVIL UNIVERSE - AI Documentary Pipeline
 
 on:
   schedule:
-    - cron: '0 12 * * *' # 17:00 PKT (18:00 PKT scheduled upload se pehle ready)
+    - cron: '0 12 * * *' # 17:00 PKT (18:00 PKT upload se pehle ready)
   workflow_dispatch:
 
 permissions:
@@ -22,28 +22,32 @@ jobs:
           python-version: '3.11'
           cache: 'pip'
 
-      - name: Setup Deno (For yt-dlp EJS Challenges)
-        uses: denoland/setup-deno@v2
-        with:
-          deno-version: v2.x
+      - name: Fast Syntax Check
+        run: python -m py_compile *.py kaggle_render/*.py
 
-      - name: Fast Syntax Check (1 Second Fail-Fast)
-        run: python -m py_compile *.py
-
-      - name: Cache Ollama Models (Text + Vision AI)
+      - name: Cache Ollama Models
         uses: actions/cache@v4
         with:
           path: ~/.ollama
-          key: ${{ runner.os }}-ollama-llama3.2-1b-qwen2.5vl-3b-v1
+          key: ${{ runner.os }}-ollama-qwen2.5-3b-llama-v2
           restore-keys: |
             ${{ runner.os }}-ollama-
 
-      - name: Install Dependencies, FFmpeg & Ollama Models
+      - name: Cache Kokoro Human TTS Models
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/kokoro
+          key: kokoro-onnx-v1.0-v1
+
+      - name: Install Dependencies, FFmpeg, Espeak & Models
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y ffmpeg
+          sudo apt-get install -y ffmpeg espeak-ng
           pip install -U pip
-          pip install -U "yt-dlp[default]" requests edge-tts google-api-python-client google-auth google-auth-oauthlib kaggle bgutil-ytdlp-pot-provider six python-slugify python-dateutil
+          pip install -U requests kokoro-onnx soundfile edge-tts google-api-python-client google-auth google-auth-oauthlib kaggle numpy
+          mkdir -p ~/.cache/kokoro
+          [ -f ~/.cache/kokoro/kokoro-v1.0.onnx ] || curl -fSL "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.1/kokoro-v1.0.onnx" -o ~/.cache/kokoro/kokoro-v1.0.onnx
+          [ -f ~/.cache/kokoro/voices-v1.0.bin ] || curl -fSL "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.1/voices-v1.0.bin" -o ~/.cache/kokoro/voices-v1.0.bin
           if ! command -v ollama >/dev/null 2>&1; then
             curl -fsSL https://ollama.com/install.sh | sh
           fi
@@ -54,7 +58,7 @@ jobs:
             fi
             sleep 1
           done
-          for m in llama3.2:1b qwen2.5vl:3b; do
+          for m in qwen2.5:3b llama3.2:1b; do
             if ! ollama list | grep -q "$m"; then
               ok=0
               for r in 1 2 3; do
@@ -62,7 +66,6 @@ jobs:
                   ok=1
                   break
                 fi
-                echo "[!] Pull attempt $r failed for $m, retrying in 8s..."
                 sleep 8
               done
               [ "$ok" -eq 1 ] || exit 1
@@ -77,42 +80,27 @@ jobs:
             python -u empire_safety_shield.py
           fi
 
-      - name: Step 1 - Agent 1 (Viral Trend Scout) & Daily Task Planner
-        env:
-          YOUTUBE_TOKEN_PICKLE: ${{ secrets.YOUTUBE_TOKEN_PICKLE }}
-        run: |
-          pgrep -x ollama >/dev/null || (nohup ollama serve >/tmp/ollama.log 2>&1 & sleep 4)
-          if [ -f viral_trend_agent.py ]; then
-            python -u viral_trend_agent.py
-          fi
-          if [ -f daily_task_planner.py ]; then
-            python -u daily_task_planner.py
-          fi
+      - name: Step 1 - Viral Mystery Topic Scout
+        run: python -u viral_trend_agent.py
 
-      - name: Step 2 - Agent 2 & 3 (AI Script, Vision Check & Gameplay Harvester)
+      - name: Step 2 - AI Scriptwriter & Real Video Harvester (Pixabay + NASA)
         env:
-          YOUTUBE_TOKEN_PICKLE: ${{ secrets.YOUTUBE_TOKEN_PICKLE }}
+          PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
         run: |
           pgrep -x ollama >/dev/null || (nohup ollama serve >/tmp/ollama.log 2>&1 & sleep 4)
-          docker run --name bgutil-provider -d --init -p 127.0.0.1:4416:4416 brainicism/bgutil-ytdlp-pot-provider || true
-          (curl -fSL --max-time 20 "https://github.com/ViRb3/wgcf/releases/download/v2.3.1/wgcf_2.3.1_linux_amd64" -o /tmp/wgcf && chmod +x /tmp/wgcf && curl -fSL --max-time 20 "https://github.com/windtf/wireproxy/releases/latest/download/wireproxy_linux_amd64.tar.gz" -o /tmp/wp.tar.gz && tar -xzf /tmp/wp.tar.gz -C /tmp && chmod +x /tmp/wireproxy && /tmp/wgcf register --accepted-tos && /tmp/wgcf generate && printf "WGConfig = ./wgcf-profile.conf\n[Socks5]\nBindAddress = 127.0.0.1:1080\n" > /tmp/wireproxy.conf && nohup /tmp/wireproxy -c /tmp/wireproxy.conf >/tmp/wp.log 2>&1 </dev/null & sleep 3) || true
           python -u generate_script.py
-          rm -f wgcf-account.toml wgcf-profile.conf 2>/dev/null || true
 
-      - name: Step 3 - Agent 4A (Voice, SFX, BGM & Dual Subtitles)
+      - name: Step 3 - Human Documentary Voice (Kokoro-82M) & Sound Design
         run: python -u generate_audio.py
 
-      - name: Step 4 - Commit & Push Gameplay, Audio & Visual Hashes
+      - name: Step 4 - Save Topic History
         run: |
-          mkdir -p kaggle_render
-          cp -f raw_gameplay.mp4 final_audio.wav current_script.json kaggle_render/ 2>/dev/null || true
-          cp -f subtitles.srt subtitles_en.srt kaggle_render/ 2>/dev/null || true
           git config --global user.name "DEVIL Pipeline Bot"
           git config --global user.email "bot@devil-insanity.local"
-          git add -A
-          git commit -m "Pass gameplay & assets to Kaggle [skip ci]" || echo "Nothing new to commit"
+          git add posted_history.json current_script.json trending_topic.json 2>/dev/null || true
+          git commit -m "Update documentary history [skip ci]" || echo "Nothing new to commit"
           git pull --rebase origin main || true
-          git push origin main
+          git push origin main || true
 
       - name: Step 5 - Setup Kaggle Credentials
         env:
@@ -128,30 +116,30 @@ jobs:
           fi
           chmod 600 ~/.kaggle/kaggle.json
 
-      - name: Step 6 - Agent 4B (Kaggle Render CPU Mode, Zero Fallback)
+      - name: Step 6 - Kaggle T4 GPU Render (Wan2.1 Real AI Video + Cinema Edit)
         run: |
           rm -rf kaggle_assets && mkdir -p kaggle_assets
-          cp -f raw_gameplay.mp4 final_audio.wav current_script.json kaggle_assets/
+          cp -f final_audio.wav current_script.json kaggle_assets/
           cp -f subtitles.srt subtitles_en.srt kaggle_assets/ 2>/dev/null || true
+          cp -f stock_clips/*.mp4 kaggle_assets/ 2>/dev/null || true
           python3 -c 'import json, os; u=json.load(open(os.path.expanduser("~/.kaggle/kaggle.json")))["username"]; json.dump({"title":"devil-insanity-assets","id":f"{u}/devil-insanity-assets","licenses":[{"name":"CC0-1.0"}]}, open("kaggle_assets/dataset-metadata.json","w"), indent=2)'
           kaggle datasets version -p kaggle_assets -m "Run ${{ github.run_number }}-${{ github.run_attempt }}" --dir-mode zip || kaggle datasets create -p kaggle_assets --dir-mode zip
-          echo "[*] Waiting 35s for Kaggle to index fresh assets..."
-          sleep 35
+          echo "[*] Waiting 30s for Kaggle dataset indexing..."
+          sleep 30
 
-          python3 -c 'import json, os, re; u=json.load(open(os.path.expanduser("~/.kaggle/kaggle.json")))["username"]; p="kaggle_render/kernel-metadata.json"; m=json.load(open(p)); s=re.sub(r"[^a-z0-9-]+","-",m.get("id",f"{u}/devil-video-render-engine").split("/")[-1].lower()).strip("-") or "devil-video-render-engine"; m["id"]=f"{u}/{s}"; m["title"]=s; m["enable_gpu"]=False; m["enable_internet"]=True; m["dataset_sources"]=[f"{u}/devil-insanity-assets"]; json.dump(m,open(p,"w"),indent=2); print("Synced:",m["id"],"dataset:",m["dataset_sources"])'
+          python3 -c 'import json, os, re; u=json.load(open(os.path.expanduser("~/.kaggle/kaggle.json")))["username"]; p="kaggle_render/kernel-metadata.json"; m=json.load(open(p)); s=re.sub(r"[^a-z0-9-]+","-",m.get("id",f"{u}/devil-video-render-engine").split("/")[-1].lower()).strip("-") or "devil-video-render-engine"; m["id"]=f"{u}/{s}"; m["title"]=s; m["enable_gpu"]=True; m["enable_internet"]=True; m["dataset_sources"]=[f"{u}/devil-insanity-assets"]; json.dump(m,open(p,"w"),indent=2); print("Synced:",m["id"],"GPU:",m["enable_gpu"])'
           set +e
           PUSH_OUT=$(kaggle kernels push -p kaggle_render 2>&1)
           PUSH_RC=$?
           set -e
           echo "$PUSH_OUT"
           if [ $PUSH_RC -ne 0 ] || echo "$PUSH_OUT" | grep -qi "409"; then
-            echo "[!] Kaggle 409/conflict detected. Rotating to fresh unique slug..."
-            NEW_SLUG="devil-render-v${{ github.run_number }}-${{ github.run_attempt }}-$(date +%s | tail -c 5)"
-            python3 -c 'import json, os, sys; ns=sys.argv[1]; u=json.load(open(os.path.expanduser("~/.kaggle/kaggle.json")))["username"]; p="kaggle_render/kernel-metadata.json"; m=json.load(open(p)); m["id"]=f"{u}/{ns}"; m["title"]=ns; m["enable_gpu"]=False; m["enable_internet"]=True; m["dataset_sources"]=[f"{u}/devil-insanity-assets"]; json.dump(m,open(p,"w"),indent=2); print("Rotated:",m["id"])' "$NEW_SLUG"
+            NEW_SLUG="devil-doc-v${{ github.run_number }}-${{ github.run_attempt }}-$(date +%s | tail -c 5)"
+            python3 -c 'import json, os, sys; ns=sys.argv[1]; u=json.load(open(os.path.expanduser("~/.kaggle/kaggle.json")))["username"]; p="kaggle_render/kernel-metadata.json"; m=json.load(open(p)); m["id"]=f"{u}/{ns}"; m["title"]=ns; m["enable_gpu"]=True; m["enable_internet"]=True; m["dataset_sources"]=[f"{u}/devil-insanity-assets"]; json.dump(m,open(p,"w"),indent=2)' "$NEW_SLUG"
             kaggle kernels push -p kaggle_render
           fi
           KERNEL_ID=$(python3 -c 'import json; print(json.load(open("kaggle_render/kernel-metadata.json"))["id"])')
-          echo "[*] Polling Kaggle Kernel: $KERNEL_ID"
+          echo "[*] Polling Kaggle GPU Kernel: $KERNEL_ID"
           for i in $(seq 1 90); do
             STATUS_OUT=$(kaggle kernels status "$KERNEL_ID" 2>&1 || true)
             echo "[$i/90] $STATUS_OUT"
@@ -168,20 +156,18 @@ jobs:
           kaggle kernels output "$KERNEL_ID" -p .
           ls -lh final_output.mp4
 
-      - name: Step 7 - Agent 5 (QA Guard) & Upload to YouTube (18:00 PKT)
+      - name: Step 7 - Technical QA & YouTube Global Upload
         env:
           YOUTUBE_TOKEN_PICKLE: ${{ secrets.YOUTUBE_TOKEN_PICKLE }}
         run: |
-          pgrep -x ollama >/dev/null || (nohup ollama serve >/tmp/ollama.log 2>&1 & sleep 4)
           if [ -f qa_guard_agent.py ]; then
             python -u qa_guard_agent.py final_output.mp4
           fi
           python -u upload_video.py
 
-      - name: Step 8 - Agent 6 (Live Comment Auto-Reply & Heart Bot)
+      - name: Step 8 - Comment Auto-Reply Bot
         env:
           YOUTUBE_TOKEN_PICKLE: ${{ secrets.YOUTUBE_TOKEN_PICKLE }}
         run: |
           pgrep -x ollama >/dev/null || (nohup ollama serve >/tmp/ollama.log 2>&1 & sleep 4)
-          python -u comment_reply_bot.py
-          
+          python -u comment_reply_bot.py || true
