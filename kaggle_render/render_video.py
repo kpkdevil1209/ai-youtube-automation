@@ -22,6 +22,14 @@ def find_assets_dir():
     raise FileNotFoundError("Assets (current_script.json / final_audio.wav) not found")
 
 
+def audio_duration(path):
+    out = subprocess.check_output([
+        "ffprobe", "-v", "error", "-show_entries", "format=duration",
+        "-of", "default=noprint_wrappers=1:nokey=1", path,
+    ], text=True).strip()
+    return float(out)
+
+
 def ensure_ai_packages():
     try:
         from diffusers import AutoencoderKLWan, WanPipeline  # noqa: F401
@@ -57,7 +65,8 @@ def generate_wan_clips(beats, out_dir):
         for idx, beat in enumerate(beats):
             if beat.get("visual_mode") != "ai_video":
                 continue
-            prompt = (beat.get("ai_prompt") or beat["narration"]) + ", photorealistic 35mm dark cinema, moody volumetric lighting, fluid motion"
+            text_src = beat.get("ai_prompt") or beat.get("narration") or "dark deep ocean abyss"
+            prompt = text_src + ", photorealistic 35mm dark cinema, moody volumetric lighting, fluid motion"
             print(f"[*] Generating Real AI Video for Beat {idx} (480x832)...", flush=True)
             frames = pipe(
                 prompt=prompt[:350],
@@ -97,28 +106,46 @@ def pick_font_option():
 def main():
     assets = find_assets_dir()
     print(f"[*] Assets dir: {assets}", flush=True)
+    print(f"[*] Assets files: {sorted(os.listdir(assets))}", flush=True)
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     os.makedirs(TMP_DIR, exist_ok=True)
 
     with open(os.path.join(assets, "current_script.json"), "r", encoding="utf-8") as f:
         script = json.load(f)
+    print(f"[*] Script keys: {list(script.keys())} | Topic: {script.get('topic')}", flush=True)
 
-    beats = script["beats"]
-    beat_times = script["beat_times"]
     audio_path = os.path.join(assets, "final_audio.wav")
     srt_path = os.path.join(assets, "subtitles.srt")
-    badge = "".join(c for c in str(script.get("hook_badge", "CLASSIFIED")) if c.isalnum() or c in " .,-")[:24]
+    beats = script.get("beats") or script.get("segments") or []
+    if not beats:
+        raise RuntimeError("No beats found in current_script.json (check Step 2/3 or Kaggle dataset sync)")
 
+    beat_times = script.get("beat_times")
+    if not beat_times or len(beat_times) != len(beats):
+        tot = audio_duration(audio_path)
+        step = tot / len(beats)
+        beat_times = [{"idx": i, "start": round(i * step, 3), "end": round((i + 1) * step, 3)} for i in range(len(beats))]
+        print(f"[!] Computed fallback beat_times ({tot:.2f}s / {len(beats)} beats)", flush=True)
+
+    badge = "".join(c for c in str(script.get("hook_badge", "CLASSIFIED")) if c.isalnum() or c in " .,-")[:24]
     ai_files = generate_wan_clips(beats, TMP_DIR)
 
     stock_fallback = sorted(glob.glob(os.path.join(assets, "stock_*.mp4")))
+    if not stock_fallback and os.path.exists(os.path.join(assets, "raw_gameplay.mp4")):
+        stock_fallback = [os.path.join(assets, "raw_gameplay.mp4")]
+
     piece_paths = []
     for i, (beat, bt) in enumerate(zip(beats, beat_times)):
         dur = max(1.5, float(bt["end"]) - float(bt["start"]))
         src = ai_files.get(i)
         if not src or not os.path.exists(src):
             cand = os.path.join(assets, beat.get("stock_file", f"stock_{i}.mp4"))
-            src = cand if os.path.exists(cand) else stock_fallback[i % len(stock_fallback)]
+            if os.path.exists(cand):
+                src = cand
+            elif stock_fallback:
+                src = stock_fallback[i % len(stock_fallback)]
+            else:
+                raise FileNotFoundError("No stock or AI video file available for rendering")
 
         piece = os.path.join(TMP_DIR, f"piece_{i}.mp4")
         slow = "setpts=1.18*PTS," if i in ai_files else ""
