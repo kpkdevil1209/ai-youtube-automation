@@ -1,75 +1,51 @@
 {
-  "title": "The Secret of the 2-Second Wait #shorts",
-  "description": "Inside a building, aiming at an enemy in the distance. Tension: Tension Aim at 6.0s, enemy distance 100m, damage 200. Headshot Hit. Intense Free Fire combat. Gun: Pistol.",
-  "hook_badge": "7 SECONDS EARLIER",
+  "theme": "SPACE",
+  "topic": "Rogue Planets Floating Alone In Pitch Black Space",
+  "format_type": "SHORTS",
+  "title": "Frozen Worlds Counting Down",
+  "description": "photorealistic 9:16 dark cinematic scene: rogue planet drifting alone, camera swoops in tight, pans out to vast empty space. Alien world, icy landscape, frozen lakes. Rogue planet, lifeless, drifting. Earthling eyes, blank, silent. Counting down, 3, 2, 1, fading into abyss.",
   "tags": [
-    "Free Fire",
-    "Viral Gaming",
-    "20s",
-    "Short",
-    "Headshot",
-    "Pistol",
-    "Tension",
-    "Psychology Triggers",
-    "Gaming"
+    "alienworld",
+    "solitudeinspace",
+    "frostigeworlds"
   ],
-  "pinned_comment": "Comment your thoughts on the secret of the 2-second wait! #FreeFire #Headshot #Psychology",
-  "topic": "IMPOSSIBLE FREE FIRE ONE TAP",
-  "psychology": [
-    "Pattern Contradiction",
-    "Forbidden Unwritten Rule",
-    "Grandmaster Ego Challenge"
-  ],
-  "voice_lang": "hi",
-  "theme": "GOLDEN",
-  "timeline": {
-    "kill_at": 7.5,
-    "duration": 11.5,
-    "weapon": "Pistol",
-    "before_7s": "Inside a building, aiming at an enemy in the distance.",
-    "tension_aim": "Tension Aim at 6.0s, enemy distance 100m, damage 200",
-    "headshot_hit": "intense Free Fire combat",
-    "after_kill": "intense Free Fire combat"
-  },
-  "segments": [
+  "pinned_comment": "Could rogue planets harboring alien life be closer than we think? \ud83e\udd14 #RoguePlanets #SpaceMystery",
+  "hook_badge": "PINNEDCOMMENT",
+  "beats": [
     {
-      "text": "भाई, रुक, देख, बंदा, खत्म",
-      "en": "Hey, slow down, let's take a look, it's closed, let's finish this...",
-      "sfx": "hit",
-      "pace": "fast"
+      "narration": "1/3: Counting down to loneliness.",
+      "search_query": "alienworlds loneliness",
+      "ai_prompt": "photorealistic 9:16 dark cinematic scene: alien planet, icy landscape, camera swoops in tight, pans out to vast empty space, camera slowly zooms out revealing the planet drifting alone in the darkness.",
+      "visual_mode": "ai_video",
+      "stock_file": "stock_0.mp4"
     },
     {
-      "text": "भाई, रुक, देख, बंदा, खत्म",
-      "en": "Hey, slow down, let's take a look, it's closed, let's finish this...",
-      "sfx": "rewind",
-      "pace": "normal"
+      "narration": "2/3: 3 rogue planets float.",
+      "search_query": "solitudeinspace",
+      "ai_prompt": "photorealistic 9:16 dark cinematic scene: 3 rogue planets, drifting in empty space, camera zooms in on one planet, then pans out to reveal the others, camera slowly zooms out revealing the planets drifting alone in the abyss.",
+      "visual_mode": "stock_video",
+      "stock_file": "stock_1.mp4"
     },
     {
-      "text": "भाई, रुक, देख, बंदा, खत्म",
-      "en": "Hey, slow down, let's take a look, it's closed, let's finish this...",
-      "sfx": "whoosh",
-      "pace": "normal"
+      "narration": "3/3: 2 rogue planets fade.",
+      "search_query": "frostigeworlds",
+      "ai_prompt": "photorealistic 9:16 dark cinematic scene: last rogue planet, frozen landscape, camera zooms in, then pans out to reveal the planet fading into darkness, camera slowly zooms out revealing the planet drifting alone in the void.",
+      "visual_mode": "stock_video",
+      "stock_file": "stock_2.mp4"
     },
     {
-      "text": "भाई, रुक, देख, बंदा, खत्म",
-      "en": "Hey, slow down, let's take a look, it's closed, let's finish this...",
-      "sfx": "hit",
-      "pace": "slow"
+      "narration": "4/3: 1 rogue planet remains.",
+      "search_query": "alienworlds",
+      "ai_prompt": "photorealistic 9:16 dark cinematic scene: last rogue planet, frozen landscape, camera slowly zooms in to reveal the planet, camera slowly pans out to reveal the planet drifting alone in the abyss, camera zooms out revealing the planet fading into darkness.",
+      "visual_mode": "stock_video",
+      "stock_file": "stock_3.mp4"
     },
     {
-      "text": "भाई, रुक, देख, बंदा, खत्म",
-      "en": "Hey, slow down, let's take a look, it's closed, let's finish this...",
-      "sfx": "whoosh",
-      "pace": "fast"
+      "narration": "5/3: Counting down.",
+      "search_query": "solitudeinspace",
+      "ai_prompt": "photorealistic 9:16 dark cinematic scene: last rogue planet, frozen landscape, camera zooms in to reveal the planet, then slowly pans out to reveal the planet drifting alone in the abyss, camera zooms out revealing the planet fading into darkness.",
+      "visual_mode": "ai_video",
+      "stock_file": "stock_4.mp4"
     }
-  ],
-  "narration": "भाई, रुक, देख, बंदा, खत्म भाई, रुक, देख, बंदा, खत्म भाई, रुक, देख, बंदा, खत्म भाई, रुक, देख, बंदा, खत्म भाई, रुक, देख, बंदा, खत्म",
-  "script": "Hey, slow down, let's take a look, it's closed, let's finish this... Hey, slow down, let's take a look, it's closed, let's finish this... Hey, slow down, let's take a look, it's closed, let's finish this... Hey, slow down, let's take a look, it's closed, let's finish this... Hey, slow down, let's take a look, it's closed, let's finish this...",
-  "beat_times": [
-    0.0,
-    2.02,
-    4.92,
-    7.82,
-    10.9
   ]
 }
