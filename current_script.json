@@ -1,76 +1,70 @@
 {
-  "title": "The 2.0 Free Fire Battle: Targeting the Distance, Headshot Hit | #Shorts",
-  "description": "A thrilling Free Fire battle where precision meets intensity. Dive into the heart of Free Fire's excitement!",
+  "title": "7 Seconds of Firefighting: The Final Showdown #shorts",
+  "description": "In this epic Free Fire short, discover the secrets behind the final headshot that changed the game!",
   "hook_badge": "7 SECONDS EARLIER",
   "tags": [
     "Free Fire",
-    "Headshot",
-    "Free Fire Battle",
-    "Free Fire Gameplay",
-    "Free Fire Tips",
-    "Free Fire Tricks",
-    "Free Fire Tips and Tricks",
-    "Free Fire Game",
-    "Free Fire Game Tips",
-    "Free Fire Game Tricks"
+    "Gaming",
+    "Viral",
+    "Shorts"
   ],
-  "pinned_comment": "Wow, that headshot was intense! #FreeFire",
+  "pinned_comment": "Did you know...?",
   "topic": "IMPOSSIBLE FREE FIRE ONE TAP",
   "psychology": [
-    "50-50 Controversy Trap",
     "Pattern Contradiction",
-    "Grandmaster Ego Challenge"
+    "Grandmaster Ego Challenge",
+    "Loss Aversion Near-Death"
   ],
   "voice_lang": "hi",
-  "theme": "CRIMSON",
+  "theme": "GOLDEN",
   "timeline": {
     "kill_at": 7.5,
     "duration": 11.5,
-    "weapon": "Rifle",
-    "before_7s": "Targeting an enemy in the distance, aiming for a precise shot.",
-    "tension_aim": "Targeting an enemy in the distance, aiming for precision and accuracy.",
+    "weapon": "P90",
+    "before_7s": "field with grass and trees, enemy distance: 100 meters, damage or knock: 100 damage",
+    "tension_aim": "Tension Aim at 6.0s, enemy distance unknown, potential damage or knock",
     "headshot_hit": "intense Free Fire combat",
-    "after_kill": "A player is aiming through a scope at an enemy in the distance. The enemy is at a distance of 4"
+    "after_kill": "After killing an enemy, the player is in a yellow container area with a red car nearby. The pla"
   },
   "segments": [
     {
-      "text": "हां, रुक, देख, बंदा, खत्म",
-      "en": "Hey, pause, look, close, end of the game,",
+      "text": "भाई, रुक, देख, बंदा, खत्म",
+      "en": "Hey, hold up, look, it's closed, it's over...",
       "sfx": "hit",
       "pace": "fast"
     },
     {
-      "text": "हां, रुक, देख, बंदा, खत्म",
-      "en": "Hey, pause, look, close, end of the game,",
+      "text": "भाई, रुक, देख, बंदा, खत्म",
+      "en": "Hey, hold up, look, it's closed, it's over...",
       "sfx": "rewind",
       "pace": "normal"
     },
     {
-      "text": "हां, रुक, देख, बंदा, खत्म",
-      "en": "Hey, pause, look, close, end of the game,",
+      "text": "भाई, रुक, देख, बंदा, खत्म",
+      "en": "Hey, hold up, look, it's closed, it's over...",
       "sfx": "whoosh",
       "pace": "normal"
     },
     {
-      "text": "हां, रुक, देख, बंदा, खत्म",
-      "en": "Hey, pause, look, close, end of the game,",
+      "text": "भाई, रुक, देख, बंदा, खत्म",
+      "en": "Hey, hold up, look, it's closed, it's over...",
       "sfx": "hit",
       "pace": "slow"
     },
     {
-      "text": "हां, रुक, देख, बंदा, खत्म",
-      "en": "Hey, pause, look, close, end of the game,",
+      "text": "भाई, रुक, देख, बंदा, खत्म",
+      "en": "Hey, hold up, look, it's closed, it's over...",
       "sfx": "whoosh",
       "pace": "fast"
     }
   ],
-  "narration": "हां, रुक, देख, बंदा, खत्म हां, रुक, देख, बंदा, खत्म हां, रुक, देख, बंदा, खत्म हां, रुक, देख, बंदा, खत्म हां, रुक, देख, बंदा, खत्म",
-  "script": "Hey, pause, look, close, end of the game, Hey, pause, look, close, end of the game, Hey, pause, look, close, end of the game, Hey, pause, look, close, end of the game, Hey, pause, look, close, end of the game,",
+  "narration": "भाई, रुक, देख, बंदा, खत्म भाई, रुक, देख, बंदा, खत्म भाई, रुक, देख, बंदा, खत्म भाई, रुक, देख, बंदा, खत्म भाई, रुक, देख, बंदा, खत्म",
+  "script": "Hey, hold up, look, it's closed, it's over... Hey, hold up, look, it's closed, it's over... Hey, hold up, look, it's closed, it's over... Hey, hold up, look, it's closed, it's over... Hey, hold up, look, it's closed, it's over...",
   "beat_times": [
     0.0,
-    1.88,
-    4.63,
-    7.38,
-    10.3
+    2.02,
+    4.92,
+    7.81,
+    10.9
   ]
 }
