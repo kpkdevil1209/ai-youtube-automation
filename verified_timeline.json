@@ -1,0 +1,9 @@
+{
+  "kill_at": 8.5,
+  "duration": 11.0,
+  "weapon": "P90",
+  "before_setup": "field with trees and buildings in the background, enemy in the distance, player moving towards ",
+  "tension_aim": "mid-air jump, aiming at enemy player in the distance.",
+  "headshot_hit": "Enemy in a building, shooting at the player's character, headshot hit at 8.5 seconds.",
+  "aftermath": "enemy in the distance, moving towards the player's position, preparing to attack."
+}

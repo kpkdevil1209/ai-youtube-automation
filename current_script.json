@@ -1,58 +1,68 @@
 {
-  "title": "FREE FIRE ONE TAP HEADSHOT SECRET #freefire #shorts",
-  "description": "Uncover the REAL reason behind the FREE FIRE MAX 2026. REVEAL THE SECRETS BEHIND THE ONE TAP HEADSHOT. LEARN THE TRUTH.",
+  "title": "Punchy English #Shorts",
+  "description": "Get ready for the intense action!",
+  "hook_badge": "BEAT1",
   "tags": [
-    "#freefire",
-    "#shorts",
+    "#freefire #shorts",
+    "#action",
     "#gaming",
-    "#onetapheadshot",
-    "#secret",
-    "#gamenews",
-    "#gamingnews",
-    "#gamingcommunity"
+    "#shootout",
+    "#p90",
+    "#punchyenglish"
   ],
-  "pinned_comment": "Kya hoga FREE FIRE MAX 2026 ke bina? | #freefire #gaming",
-  "topic": "FREE FIRE ONE TAP HEADSHOT SECRET",
+  "pinned_comment": "Who else is ready for this intense shootout?",
+  "topic": "IMPOSSIBLE FREE FIRE ONE TAP BREAKDOWN",
   "format": "0.25x Slow-Mo Secret",
-  "theme": "ICE",
-  "hook": "Uncover the REAL reason behind the FREE FIRE MAX 2026",
+  "voice_lang": "hi",
+  "theme": "CYBER",
+  "timeline": {
+    "kill_at": 8.5,
+    "duration": 11.0,
+    "weapon": "P90",
+    "before_setup": "field with trees and buildings in the background, enemy in the distance, player moving towards ",
+    "tension_aim": "mid-air jump, aiming at enemy player in the distance.",
+    "headshot_hit": "Enemy in a building, shooting at the player's character, headshot hit at 8.5 seconds.",
+    "aftermath": "enemy in the distance, moving towards the player's position, preparing to attack."
+  },
   "segments": [
     {
-      "text": "The REAL reason behind FREE FIRE MAX 2026 is to bring",
+      "en": "Player jumps into frame, aiming at enemy in the distance.",
       "pace": "fast",
-      "sfx": "whoosh"
+      "sfx": "hit",
+      "text": "खिलाड़ी दूर से दुश्मन पर निशाना साधते हुए फ्रेम में कूदता है।"
     },
     {
-      "text": "Increase in game modes and features for players",
+      "en": "Player lands the jump and fires at enemy.",
       "pace": "normal",
-      "sfx": "none"
+      "sfx": "whoosh",
+      "text": "खिलाड़ी छलांग लगाता है और दुश्मन पर फायर करता है।"
     },
     {
-      "text": "New season of rewards and exclusive items",
-      "pace": "slow",
-      "sfx": "hit"
-    },
-    {
-      "text": "Enhanced matchmaking and improved server quality",
-      "pace": "slow",
-      "sfx": "whoosh"
-    },
-    {
-      "text": "More opportunities for players to engage with the community",
+      "en": "Enemy takes a headshot, but the player is safe.",
       "pace": "normal",
-      "sfx": "none"
+      "sfx": "whoosh",
+      "text": "दुश्मन सिर पर गोली मारता है, लेकिन खिलाड़ी सुरक्षित है।"
     },
     {
-      "text": "A new era of gaming with FREE FIRE MAX 2026 begins",
+      "en": "Enemy tries to attack, but the player is ready.",
+      "pace": "slow",
+      "sfx": "hit",
+      "text": "दुश्मन हमला करने की कोशिश करता है, लेकिन खिलाड़ी तैयार है।"
+    },
+    {
+      "en": "Player lands another jump and fires again, this time hitting the enemy.",
       "pace": "fast",
-      "sfx": "hit"
-    },
-    {
-      "text": "Get ready for the most epic gaming experience ever",
-      "pace": "slow",
-      "sfx": "whoosh"
+      "sfx": "whoosh",
+      "text": "खिलाड़ी एक और छलांग लगाता है और फिर से फायर करता है, इस बार दुश्मन को मारता है।"
     }
   ],
-  "narration": "The REAL reason behind FREE FIRE MAX 2026 is to bring Increase in game modes and features for players New season of rewards and exclusive items Enhanced matchmaking and improved server quality More opportunities for players to engage with the community A new era of gaming with FREE FIRE MAX 2026 begins Get ready for the most epic gaming experience ever",
-  "script": "The REAL reason behind FREE FIRE MAX 2026 is to bring Increase in game modes and features for players New season of rewards and exclusive items Enhanced matchmaking and improved server quality More opportunities for players to engage with the community A new era of gaming with FREE FIRE MAX 2026 begins Get ready for the most epic gaming experience ever"
+  "narration": "खिलाड़ी दूर से दुश्मन पर निशाना साधते हुए फ्रेम में कूदता है। खिलाड़ी छलांग लगाता है और दुश्मन पर फायर करता है। दुश्मन सिर पर गोली मारता है, लेकिन खिलाड़ी सुरक्षित है। दुश्मन हमला करने की कोशिश करता है, लेकिन खिलाड़ी तैयार है। खिलाड़ी एक और छलांग लगाता है और फिर से फायर करता है, इस बार दुश्मन को मारता है।",
+  "script": "Player jumps into frame, aiming at enemy in the distance. Player lands the jump and fires at enemy. Enemy takes a headshot, but the player is safe. Enemy tries to attack, but the player is ready. Player lands another jump and fires again, this time hitting the enemy.",
+  "beat_times": [
+    0.0,
+    3.49,
+    6.83,
+    10.18,
+    14.23
+  ]
 }
