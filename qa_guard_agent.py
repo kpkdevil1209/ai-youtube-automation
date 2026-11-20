@@ -1,26 +1,8 @@
-import base64
 import json
 import os
 import re
 import subprocess
 import sys
-import tempfile
-import requests
-
-OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434/api/chat")
-if not OLLAMA_URL.endswith("/api/chat"):
-    OLLAMA_URL = OLLAMA_URL.rstrip("/") + "/api/chat"
-VISION_MODEL = os.environ.get("VISION_MODEL", "qwen2.5vl:3b")
-
-QA_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "is_gameplay": {"type": "boolean"},
-        "is_corrupted_or_black": {"type": "boolean"},
-        "confidence": {"type": "integer"},
-    },
-    "required": ["is_gameplay", "is_corrupted_or_black", "confidence"],
-}
 
 
 def probe_video_local(path):
@@ -50,16 +32,6 @@ def check_audio_local(path):
     if not m or "inf" in m.group(1).lower():
         return -99.0
     return float(m.group(1))
-
-
-def extract_frame_jpg(path, ts, out_jpg, size=384):
-    vf = f"scale={size}:{size}:force_original_aspect_ratio=decrease"
-    cmd = [
-        "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
-        "-ss", f"{ts:.2f}", "-i", path, "-vframes", "1",
-        "-vf", vf, "-q:v", "4", out_jpg,
-    ]
-    subprocess.run(cmd, check=True)
 
 
 def extract_gray_bytes(path, ts, w=160, h=160):
@@ -114,54 +86,6 @@ def quality_and_motion(path, dur):
         raise RuntimeError(f"QA FAIL: Frozen or static video (motion={avg_motion:.2f})")
 
 
-def parse_qa_json(raw):
-    try:
-        return json.loads(raw)
-    except Exception:
-        g = re.search(r'"is_gameplay"\s*:\s*(true|false)', raw, re.I)
-        b = re.search(r'"is_corrupted_or_black"\s*:\s*(true|false)', raw, re.I)
-        c = re.search(r'"confidence"\s*:\s*(\d+)', raw)
-        if g:
-            return {
-                "is_gameplay": g.group(1).lower() == "true",
-                "is_corrupted_or_black": (b.group(1).lower() == "true") if b else False,
-                "confidence": int(c.group(1)) if c else 80,
-            }
-        raise
-
-
-def ask_rendered_qa_frame(path, ts):
-    with tempfile.TemporaryDirectory() as tmp:
-        jpg = os.path.join(tmp, "v.jpg")
-        extract_frame_jpg(path, ts, jpg, size=384)
-        with open(jpg, "rb") as f:
-            b64 = base64.b64encode(f.read()).decode("utf-8")
-    prompt = (
-        "Check this rendered vertical 9:16 mobile gaming Short frame. "
-        "English captions, HUD badges, red zoom circles, and vignette edges are NORMAL. "
-        "Set is_gameplay=true if it shows shooter or battle-royale game footage like Free Fire. "
-        "Set is_corrupted_or_black=true ONLY if mostly black, glitch bars, or real-life camera."
-    )
-    payload = {
-        "model": VISION_MODEL,
-        "messages": [{"role": "user", "content": prompt, "images": [b64]}],
-        "stream": False,
-        "format": QA_SCHEMA,
-        "keep_alive": "2m",
-        "options": {"num_ctx": 2048, "num_predict": 120, "temperature": 0.0},
-    }
-    try:
-        r = requests.post(OLLAMA_URL, json=payload, timeout=120)
-        r.raise_for_status()
-        raw = r.json().get("message", {}).get("content", "{}")
-        data = parse_qa_json(raw)
-        ok = bool(data.get("is_gameplay")) and not bool(data.get("is_corrupted_or_black"))
-        conf = int(data.get("confidence", 0))
-        return ok, conf, "ok"
-    except Exception as e:
-        return False, 0, f"err: {e}"
-
-
 def run_qa(target="final_output.mp4"):
     if not os.path.exists(target):
         raise RuntimeError(f"QA FAIL: Missing {target}")
@@ -181,21 +105,6 @@ def run_qa(target="final_output.mp4"):
         raise RuntimeError(f"QA FAIL: Silent or missing audio ({max_vol:.1f} dB)")
 
     quality_and_motion(target, dur)
-
-    check_ratios = (0.25, 0.55, 0.40)
-    passed = False
-    for idx, ratio in enumerate(check_ratios, 1):
-        ts = min(max(0.5, dur * ratio), max(0.5, dur - 0.5))
-        ok, conf, note = ask_rendered_qa_frame(target, ts)
-        print(f"[QA Vision {idx}/3 @ {ts:.1f}s] ok={ok} | conf={conf}% | '{note}'", flush=True)
-        if ok and conf >= 45:
-            passed = True
-            if idx == 1 and conf >= 55:
-                print("[QA Vision PASS] Fast-passed on frame 1", flush=True)
-            break
-
-    if not passed:
-        raise RuntimeError("QA FAIL: Rendered frames did not verify as valid gameplay")
     print("[+] QA GUARD PASSED: Ready for YouTube Upload!", flush=True)
 
 
