@@ -1,57 +1,56 @@
 {
   "theme": "MYSTERY",
-  "topic": "Dyatlov Pass: Why Nine Experienced Hikers Cut Their Own Tent",
+  "topic": "The Ship Found Drifting With Zero Crew And Warm Coffee Still On Table",
   "format_type": "SHORTS",
-  "title": "The Nine Who Died: A Cold Mountain Horror",
-  "description": "Search_Q: icy mountain, frozen lake, eerie silence. AI_Prompt: A dimly lit mountain peak shrouded in swirling white fog, a lone hiker silhouette in the foreground, camera panning up to reveal the frozen valley below. #FrozenMountainHorror #MountainPanic #SilentNight",
+  "title": "Ghost Ship Mystery: The Last Coffee Mug",
+  "description": "Ghost Ship Mystery: The Last Coffee Mug - Mary Celeste",
   "tags": [
-    "Dyatlov Pass",
-    "Frozen Mountain Mystery",
-    "Mountain Hiker Deaths",
-    "Alpine Horror"
+    "oceanwaves",
+    "sailingship",
+    "darkcinema"
   ],
-  "pinned_comment": "Was it fear or logic that led them to their deaths? #DyatlovPassPuzzle",
-  "hook_badge": "WHAT NINE EXPERIENCED HI",
+  "pinned_comment": "Was the coffee left as a beacon or a warning? #GhostShipMystery",
+  "hook_badge": "MARY CELESTE GHOST SHIP",
   "beats": [
     {
-      "narration": "FIVE DEADLY COLD NIGHTS...",
-      "search_query": "icy mountain, frozen lake, eerie silence",
-      "ai_prompt": "A dimly lit mountain peak shrouded in swirling white fog, a lone hiker silhouette in the foreground, camera panning up to reveal the frozen valley below.",
+      "narration": "0/35: 11-16",
+      "search_query": "oceanwaves sailingship",
+      "ai_prompt": "Photorealistic 9:16 dark cinematic scene of a sailing ship in the stormy ocean, camera panning from top to bottom of the ship, focus on the stern with a single coffee mug still on table, dark skies, lightning flashes",
       "visual_mode": "ai_video",
       "stock_file": "stock_0.mp4"
     },
     {
-      "narration": "NINE EXPERIENCED HIKERS...",
-      "search_query": "icy mountains, frozen lakes, frostbite",
-      "ai_prompt": "A hiker standing on a rocky ledge, the camera pans down to reveal his trembling hands, then a close-up of his frostbitten face.",
+      "narration": "1/35: 11-16",
+      "search_query": "shipfounddrifting",
+      "ai_prompt": "Photorealistic 9:16 dark cinematic scene of a ship found drifting at sea, camera moving from the horizon to the ship, focus on the stern, dark clouds, eerie silence, distant thunder",
       "visual_mode": "stock_video",
       "stock_file": "stock_1.mp4"
     },
     {
-      "narration": "FROZEN TENT, COLD NIGHT...",
-      "search_query": "icy winds, frozen breath, frostbite",
-      "ai_prompt": "A hiker's frozen breath forming visible clouds in the cold air, the camera capturing his struggle to breathe, the tent partially open in the biting wind.",
+      "narration": "2/35: 12-15",
+      "search_query": "darksky oceanwaves",
+      "ai_prompt": "Photorealistic 9:16 dark cinematic scene of a ship at sea, camera following the ship from the sea surface, focus on the stern, dark sky, waves crashing, eerie calm",
       "visual_mode": "stock_video",
       "stock_file": "stock_2.mp4"
     },
     {
-      "narration": "THEY CUT THEIR OWN TENTS...",
-      "search_query": "icy winds, frozen breath, frostbite",
-      "ai_prompt": "A hiker's silhouette in the distance, the camera tracking towards the campsite, the tent partially cut with bloodstains visible.",
+      "narration": "3/35: 12-16",
+      "search_query": "sailingship storms",
+      "ai_prompt": "Photorealistic 9:16 dark cinematic scene of a sailing ship in a storm, camera tracking the ship from the side, focus on the stern, dark clouds, lightning, waves crashing, eerie silence",
       "visual_mode": "stock_video",
       "stock_file": "stock_3.mp4"
     },
     {
-      "narration": "IN THEIR FINAL MOMENTS...",
-      "search_query": "icy winds, frozen breath, frostbite",
-      "ai_prompt": "A hiker's silhouette in the distance, the camera tracking towards the campsite, the tent partially cut with bloodstains visible. A final, chilling silence.",
+      "narration": "4/35: 12-16",
+      "search_query": "darksky oceanwaves",
+      "ai_prompt": "Photorealistic 9:16 dark cinematic scene of a sailing ship at sea, camera following the ship from the side, focus on the stern, dark sky, waves crashing, eerie silence, distant lightning",
       "visual_mode": "ai_video",
       "stock_file": "stock_4.mp4"
     },
     {
-      "narration": "WHY DID THEY DO IT?...",
-      "search_query": "icy winds, frozen breath, frostbite",
-      "ai_prompt": "A hiker's silhouette in the distance, the camera tracking towards the campsite, the tent partially cut with bloodstains visible. A final, chilling silence.",
+      "narration": "5/35: 11-16",
+      "search_query": "sailingship storms",
+      "ai_prompt": "Photorealistic 9:16 dark cinematic scene of a sailing ship in a storm, camera tracking the ship from the side, focus on the stern, dark clouds, lightning, waves crashing, eerie silence, distant thunder",
       "visual_mode": "stock_video",
       "stock_file": "stock_5.mp4"
     }
