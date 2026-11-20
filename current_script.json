@@ -1,51 +1,61 @@
 {
-  "theme": "SPACE",
-  "topic": "Rogue Planets Floating Alone In Pitch Black Space",
+  "theme": "SURVIVAL",
+  "topic": "The Impossible 100 Foot Rogue Wave Sailors Swore Was A Myth",
   "format_type": "SHORTS",
-  "title": "Frozen Worlds Counting Down",
-  "description": "photorealistic 9:16 dark cinematic scene: rogue planet drifting alone, camera swoops in tight, pans out to vast empty space. Alien world, icy landscape, frozen lakes. Rogue planet, lifeless, drifting. Earthling eyes, blank, silent. Counting down, 3, 2, 1, fading into abyss.",
+  "title": "100 Foot Rogue Wave: A Sailor's Legend Unveiled",
+  "description": "ai_prompt: Photorealistic 9:16 cinematic scene of a dark, stormy ocean with towering waves crashing against steel ships, camera swooping in close to the water's edge, capturing the sheer power and ferocity of the waves. search_query: stormy ocean, rogue waves, crashing waves",
   "tags": [
-    "alienworld",
-    "solitudeinspace",
-    "frostigeworlds"
+    "rogue waves",
+    "ocean storms",
+    "steel ships",
+    "sailor tales",
+    "unveiling myths",
+    "natural wonders"
   ],
-  "pinned_comment": "Could rogue planets harboring alien life be closer than we think? \ud83e\udd14 #RoguePlanets #SpaceMystery",
-  "hook_badge": "PINNEDCOMMENT",
+  "pinned_comment": "Did sailors exaggerate the 100-foot rogue waves? #RogueWaveRealityCheck #OceanMythorFact \ud83c\udfdd\ufe0f\ud83d\udca5",
+  "hook_badge": "100 FOOT ROGUE WAVE",
   "beats": [
     {
-      "narration": "1/3: Counting down to loneliness.",
-      "search_query": "alienworlds loneliness",
-      "ai_prompt": "photorealistic 9:16 dark cinematic scene: alien planet, icy landscape, camera swoops in tight, pans out to vast empty space, camera slowly zooms out revealing the planet drifting alone in the darkness.",
+      "narration": "100 feet. Steel ships. Water. \ud83d\udca5",
+      "search_query": "stormy ocean, rogue waves, crashing waves",
+      "ai_prompt": "Photorealistic 9:16 cinematic scene: A dark, stormy ocean with towering waves crashing against steel ships, camera swooping in close to the water's edge, capturing the sheer power and ferocity of the waves.",
       "visual_mode": "ai_video",
       "stock_file": "stock_0.mp4"
     },
     {
-      "narration": "2/3: 3 rogue planets float.",
-      "search_query": "solitudeinspace",
-      "ai_prompt": "photorealistic 9:16 dark cinematic scene: 3 rogue planets, drifting in empty space, camera zooms in on one planet, then pans out to reveal the others, camera slowly zooms out revealing the planets drifting alone in the abyss.",
+      "narration": "100 feet. Steel ships. Waves. \ud83d\udca5",
+      "search_query": "ocean storms, rogue waves, crashing waves",
+      "ai_prompt": "Photorealistic 9:16 cinematic scene: A dark, stormy ocean with waves reaching 100 feet, camera sweeping across the water's surface, capturing the relentless force of the waves.",
       "visual_mode": "stock_video",
       "stock_file": "stock_1.mp4"
     },
     {
-      "narration": "3/3: 2 rogue planets fade.",
-      "search_query": "frostigeworlds",
-      "ai_prompt": "photorealistic 9:16 dark cinematic scene: last rogue planet, frozen landscape, camera zooms in, then pans out to reveal the planet fading into darkness, camera slowly zooms out revealing the planet drifting alone in the void.",
+      "narration": "Steel ships. Waves. Waves. \ud83d\udca5",
+      "search_query": "ocean storms, rogue waves, crashing waves",
+      "ai_prompt": "Photorealistic 9:16 cinematic scene: Waves reaching 100 feet crashing against steel ships, camera zooming in on the waves' relentless force, capturing the moment of impact.",
       "visual_mode": "stock_video",
       "stock_file": "stock_2.mp4"
     },
     {
-      "narration": "4/3: 1 rogue planet remains.",
-      "search_query": "alienworlds",
-      "ai_prompt": "photorealistic 9:16 dark cinematic scene: last rogue planet, frozen landscape, camera slowly zooms in to reveal the planet, camera slowly pans out to reveal the planet drifting alone in the abyss, camera zooms out revealing the planet fading into darkness.",
+      "narration": "100 feet. Steel ships. Waves. \ud83d\udca5",
+      "search_query": "ocean storms, rogue waves, crashing waves",
+      "ai_prompt": "Photorealistic 9:16 cinematic scene: Waves reaching 100 feet crashing against steel ships, camera capturing the moment of impact, the sheer power of nature.",
       "visual_mode": "stock_video",
       "stock_file": "stock_3.mp4"
     },
     {
-      "narration": "5/3: Counting down.",
-      "search_query": "solitudeinspace",
-      "ai_prompt": "photorealistic 9:16 dark cinematic scene: last rogue planet, frozen landscape, camera zooms in to reveal the planet, then slowly pans out to reveal the planet drifting alone in the abyss, camera zooms out revealing the planet fading into darkness.",
+      "narration": "Steel ships. Waves. Waves. \ud83d\udca5",
+      "search_query": "ocean storms, rogue waves, crashing waves",
+      "ai_prompt": "Photorealistic 9:16 cinematic scene: Waves reaching 100 feet crashing against steel ships, camera capturing the moment of impact, the sheer power of nature.",
       "visual_mode": "ai_video",
       "stock_file": "stock_4.mp4"
+    },
+    {
+      "narration": "Steel ships. Waves. \ud83d\udca5",
+      "search_query": "ocean storms, rogue waves, crashing waves",
+      "ai_prompt": "Photorealistic 9:16 cinematic scene: Waves reaching 100 feet crashing against steel ships, camera capturing the moment of impact, the sheer power of nature.",
+      "visual_mode": "stock_video",
+      "stock_file": "stock_5.mp4"
     }
   ]
 }
