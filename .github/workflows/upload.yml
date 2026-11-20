@@ -44,7 +44,7 @@ jobs:
           sudo apt-get update -y
           sudo apt-get install -y ffmpeg espeak-ng
           pip install -U pip
-          pip install -U requests kokoro-onnx soundfile edge-tts google-api-python-client google-auth google-auth-oauthlib kaggle numpy
+          pip install -U requests kokoro-onnx soundfile edge-tts google-api-python-client google-auth google-auth-oauthlib kaggle six python-slugify python-dateutil numpy
           mkdir -p ~/.cache/kokoro
           [ -f ~/.cache/kokoro/kokoro-v1.0.onnx ] || curl -fSL "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.1/kokoro-v1.0.onnx" -o ~/.cache/kokoro/kokoro-v1.0.onnx
           [ -f ~/.cache/kokoro/voices-v1.0.bin ] || curl -fSL "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.1/voices-v1.0.bin" -o ~/.cache/kokoro/voices-v1.0.bin
