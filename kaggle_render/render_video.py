@@ -1,255 +1,134 @@
-import gc
-import importlib.util
-import json
-import os
-import shutil
-import subprocess
-import sys
-import time
-import traceback
+import os, sys, gc, glob, json, time, shutil, subprocess, importlib.util
 
 os.environ["HF_HOME"] = "/tmp/hf_cache"
+os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "1"
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-OUT_FILE = "/kaggle/working/final_output.mp4"
-TMP_DIR = "/tmp/render_work"
-WAN_MODEL = "Wan-AI/Wan2.1-T2V-1.3B-Diffusers"
+if importlib.util.find_spec("hf_transfer") is None or importlib.util.find_spec("diffusers") is None:
+    subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-U", "diffusers", "transformers", "accelerate", "hf_transfer", "sentencepiece", "ftfy"], check=True)
 
+import torch
+from diffusers import AutoencoderKLWan, WanPipeline
+from diffusers.utils import export_to_video
 
-def find_assets_dir():
-    for dirpath, _, files in os.walk("/kaggle/input"):
-        if "current_script.json" in files and "final_audio.wav" in files:
-            return dirpath
-    raise FileNotFoundError("Fresh dataset not found in /kaggle/input")
+torch.backends.cuda.matmul.allow_tf32 = True
+MID = "Wan-AI/Wan2.1-T2V-1.3B-Diffusers"
+NEG = "blurry, low quality, static photo, freeze frame, watermark, text, logo, subtitles, deformed face, extra fingers, cartoon"
+QUAL = ", ultra detailed 35mm IMAX documentary footage, volumetric lighting, realistic physics, deep shadows, crisp focus"
 
+def find_assets():
+    for root in ("/kaggle/input", "/kaggle/working"):
+        for dp, _, fs in os.walk(root):
+            if "current_script.json" in fs and "final_audio.wav" in fs: return dp
+    raise RuntimeError("Assets not found in /kaggle/input")
 
-def audio_duration(path):
-    out = subprocess.check_output([
-        "ffprobe", "-v", "error", "-show_entries", "format=duration",
-        "-of", "default=noprint_wrappers=1:nokey=1", path,
-    ], text=True).strip()
-    return float(out)
+def probe_dur(p):
+    return float(subprocess.check_output(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", p]).decode().strip())
 
-
-def ensure_ai_packages():
-    if importlib.util.find_spec("hf_transfer") and importlib.util.find_spec("ftfy"):
-        return
-    print("[*] Installing diffusers/Wan2.1 + hf_transfer on Kaggle...", flush=True)
-    subprocess.check_call([
-        sys.executable, "-m", "pip", "install", "-q", "-U",
-        "diffusers>=0.32.2", "transformers>=4.49.0", "accelerate>=1.1.1",
-        "ftfy", "sentencepiece", "imageio-ffmpeg", "hf_transfer", "safetensors",
-    ])
-
-
-def enable_fast_hf(flag=True):
-    if flag:
-        try:
-            import hf_transfer  # noqa: F401
-            os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "1"
-            return
-        except Exception:
-            pass
-    os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "0"
-
-
-def generate_all_wan_videos(beats, out_dir):
-    import torch
-    from diffusers import AutoencoderKLWan, WanPipeline
-    from diffusers.utils import export_to_video
-
-    enable_fast_hf(True)
-    gpu_name = torch.cuda.get_device_name(0)
-    print(f"[*] Loading {WAN_MODEL} on {gpu_name}...", flush=True)
-    t0 = time.time()
-
+def encode_all_prompts(prompts):
+    vae = AutoencoderKLWan.from_pretrained(MID, subfolder="vae", torch_dtype=torch.float32)
+    pipe = WanPipeline.from_pretrained(MID, vae=vae, torch_dtype=torch.float16)
+    embeds = []
     try:
-        vae = AutoencoderKLWan.from_pretrained(WAN_MODEL, subfolder="vae", torch_dtype=torch.float32)
-        pipe = WanPipeline.from_pretrained(WAN_MODEL, vae=vae, torch_dtype=torch.float16)
-    except Exception:
-        enable_fast_hf(False)
-        vae = AutoencoderKLWan.from_pretrained(WAN_MODEL, subfolder="vae", torch_dtype=torch.float32)
-        pipe = WanPipeline.from_pretrained(WAN_MODEL, vae=vae, torch_dtype=torch.float16)
+        pipe.text_encoder.to("cuda:0")
+        with torch.inference_mode():
+            for p in prompts:
+                pe, npe = pipe.encode_prompt(prompt=p + QUAL, negative_prompt=NEG, do_classifier_free_guidance=True, device="cuda:0")
+                embeds.append((pe.cpu(), npe.cpu()))
+        torch.save(embeds, "/tmp/embeds.pt")
+        print("[+] All 5 prompts pre-encoded & 10GB text_encoder freed!", flush=True)
+    finally:
+        del pipe, vae; gc.collect(); torch.cuda.empty_cache()
 
+def render_indices(indices, prompts, base_seed):
+    vae = AutoencoderKLWan.from_pretrained(MID, subfolder="vae", torch_dtype=torch.float32)
+    has_emb = os.path.exists("/tmp/embeds.pt")
+    embeds = torch.load("/tmp/embeds.pt", map_location="cpu") if has_emb else None
     try:
-        pipe.vae.enable_tiling()
-        pipe.vae.enable_slicing()
+        pipe = WanPipeline.from_pretrained(MID, text_encoder=None, tokenizer=None, vae=vae, torch_dtype=torch.float16) if has_emb else WanPipeline.from_pretrained(MID, vae=vae, torch_dtype=torch.float16)
     except Exception:
-        pass
-
-    seq_mode = False
-    pipe.enable_model_cpu_offload()
-    print(f"[+] Wan2.1 ready in {time.time() - t0:.1f}s", flush=True)
-
-    neg = "blurry, low quality, text, watermark, subtitles, deformed faces, extra fingers, bright cartoon, static image"
-    vid_files = []
-    for idx, beat in enumerate(beats):
-        raw_p = beat.get("ai_prompt") or beat.get("shot_a") or beat.get("narration") or "deep dark ocean storm"
-        prompt = f"{raw_p}, photorealistic 35mm dark cinema, dynamic camera movement, dramatic shadows"
-        steps = 22 if idx == 0 else 18
-        nframes = 41
-        t_clip = time.time()
-        print(f"[*] Generating Real AI Video [{idx + 1}/{len(beats)}] (480x832, {nframes}f, {steps}s)...", flush=True)
-        try:
-            frames = pipe(
-                prompt=prompt[:320],
-                negative_prompt=neg,
-                height=832,
-                width=480,
-                num_frames=nframes,
-                num_inference_steps=steps,
-                guidance_scale=5.0,
-            ).frames[0]
-        except Exception as e:
-            if not seq_mode and ("out of memory" in str(e).lower() or "cuda" in str(e).lower()):
-                print("[!] VRAM tight -> switching to sequential_cpu_offload and retrying...", flush=True)
-                gc.collect()
-                torch.cuda.empty_cache()
-                pipe.enable_sequential_cpu_offload()
-                seq_mode = True
-                frames = pipe(
-                    prompt=prompt[:320],
-                    negative_prompt=neg,
-                    height=832,
-                    width=480,
-                    num_frames=nframes,
-                    num_inference_steps=steps,
-                    guidance_scale=5.0,
-                ).frames[0]
-            else:
-                traceback.print_exc()
-                raise
-
-        out_mp4 = os.path.join(out_dir, f"wan_{idx}.mp4")
-        export_to_video(frames, out_mp4, fps=16)
-        vid_files.append(out_mp4)
-        print(f"[+] Real AI Video [{idx + 1}/{len(beats)}] done in {time.time() - t_clip:.1f}s!", flush=True)
-
-    del pipe, vae
-    gc.collect()
-    torch.cuda.empty_cache()
-    shutil.rmtree("/tmp/hf_cache", ignore_errors=True)
-    return vid_files
-
-
-def pick_font_option():
-    for fp in (
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-    ):
-        if os.path.exists(fp):
-            return f"fontfile={fp}:"
-    return ""
-
-
-def process_video_beat(src, dur, idx, climax_idx, out_mp4):
-    dur_s = max(1.0, dur)
-    if idx == 0:
-        crop = "crop=1080:1920:x='(iw-ow)/2+12*sin(t*14)':y='(ih-oh)/2+10*cos(t*12)'"
-        flash = ":brightness='0.26*between(t,0,0.14)':eval=frame"
-    elif idx == climax_idx:
-        crop = f"crop=1080:1920:x='(iw-ow)/2+14*sin(t*16)':y='(ih-oh)/2-36*(t/{dur_s:.2f}-0.5)'"
-        flash = ":brightness='0.30*between(t,0,0.16)':eval=frame"
+        has_emb = False
+        pipe = WanPipeline.from_pretrained(MID, vae=vae, torch_dtype=torch.float16)
+    pipe.vae.enable_tiling(); pipe.vae.enable_slicing()
+    if has_emb:
+        try: pipe.to("cuda")
+        except Exception: pipe.enable_model_cpu_offload()
     else:
-        crop = f"crop=1080:1920:x='(iw-ow)/2+36*(t/{dur_s:.2f}-0.5)':y='(ih-oh)/2-28*(t/{dur_s:.2f}-0.5)'"
-        flash = ":brightness=-0.03"
+        pipe.enable_model_cpu_offload()
 
-    vf = (
-        f"setpts=1.40*PTS,scale=1180:2098:force_original_aspect_ratio=increase:flags=lanczos,"
-        f"{crop},eq=contrast=1.14:saturation=0.90{flash},"
-        "noise=alls=5:allf=t,unsharp=5:5:0.65:5:5:0.15,fps=30"
-    )
-    subprocess.run([
-        "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
-        "-stream_loop", "-1", "-i", src, "-t", f"{dur:.3f}",
-        "-vf", vf, "-an", "-c:v", "libx264", "-preset", "ultrafast", "-crf", "15",
-        "-video_track_timescale", "30000", "-pix_fmt", "yuv420p", out_mp4,
-    ], check=True)
+    for i in indices:
+        steps = 22 if i == 0 else 20
+        print(f"[*] GPU Rendering Beat {i} (480x832, 33f, {steps} steps)...", flush=True)
+        g = torch.Generator(device="cpu").manual_seed(base_seed + i * 7)
+        kw = {"prompt_embeds": embeds[i][0].to("cuda"), "negative_prompt_embeds": embeds[i][1].to("cuda")} if has_emb else {"prompt": prompts[i] + QUAL, "negative_prompt": NEG}
+        try:
+            with torch.inference_mode():
+                fr = pipe(**kw, height=832, width=480, num_frames=33, num_inference_steps=steps, guidance_scale=5.0, generator=g).frames[0]
+        except torch.cuda.OutOfMemoryError:
+            torch.cuda.empty_cache(); gc.collect(); pipe.enable_sequential_cpu_offload()
+            with torch.inference_mode():
+                fr = pipe(**kw, height=832, width=480, num_frames=33, num_inference_steps=steps, guidance_scale=5.0, generator=g).frames[0]
+        export_to_video(fr, f"/tmp/raw_{i}.mp4", fps=16)
+        torch.cuda.empty_cache(); gc.collect()
+    del pipe, vae; gc.collect(); torch.cuda.empty_cache()
 
+def prep_beat(raw_mp4, out_mp4, dur, idx):
+    loop_f = f"[0:v]split[a][b];[b]reverse[r];[a][r]concat=n=2:v=1:a=0,loop=loop=2:size=80:start=0,trim=duration={dur:.3f},setpts=PTS-STARTPTS"
+    if idx == 0:
+        mv = "scale=1280:2275:flags=lanczos,crop=1080:1920:x='(iw-1080)/2+16*sin(t*24)+20*sin(t*1.6)':y='(ih-1920)/2+14*cos(t*20)'"
+        gr = "eq=contrast=1.15:saturation=1.18:brightness=-0.02,unsharp=5:5:0.8:5:5:0.0,noise=alls=3:allf=t+u"
+    elif idx == 3:
+        mv = "scale=1220:2168:flags=lanczos,crop=1080:1920:x='(iw-1080)/2+28*sin(t*1.4)':y='(ih-1920)/2+16*cos(t*1.1)'"
+        gr = "eq=brightness='if(lt(t,0.18),0.22*(1-t/0.18),0)':contrast=1.14:saturation=1.18:eval=frame,unsharp=5:5:0.75:5:5:0.0,noise=alls=3:allf=t+u"
+    else:
+        sx = 28 if idx % 2 else -28
+        mv = f"scale=1200:2133:flags=lanczos,crop=1080:1920:x='(iw-1080)/2+{sx}*sin(t*1.2)':y='(ih-1920)/2+14*cos(t*0.9)'"
+        gr = "eq=contrast=1.12:saturation=1.15:brightness=-0.02,unsharp=5:5:0.75:5:5:0.0,noise=alls=3:allf=t+u"
+    subprocess.run(["ffmpeg", "-y", "-i", raw_mp4, "-filter_complex", f"{loop_f},{mv},{gr},fps=24,format=yuv420p", "-c:v", "libx264", "-preset", "fast", "-crf", "18", out_mp4], check=True)
 
 def main():
-    import torch
-    if not torch.cuda.is_available():
-        raise RuntimeError("Kaggle GPU required for Wan2.1 Real Video generation")
+    if len(sys.argv) >= 3 and sys.argv[1] == "--worker":
+        idxs = [int(x) for x in sys.argv[2].split(",")]
+        prompts = json.load(open("/tmp/prompts.json", encoding="utf-8"))
+        render_indices(idxs, prompts, int(sys.argv[3]))
+        return
 
-    assets = find_assets_dir()
-    print(f"[*] Assets dir: {assets} | Files: {sorted(os.listdir(assets))}", flush=True)
-    shutil.rmtree(TMP_DIR, ignore_errors=True)
-    os.makedirs(TMP_DIR, exist_ok=True)
+    t0 = time.time()
+    assets = find_assets()
+    sc = json.load(open(os.path.join(assets, "current_script.json"), encoding="utf-8"))
+    wav, ass_src = os.path.join(assets, "final_audio.wav"), os.path.join(assets, "subtitles.ass")
+    total_dur = float(sc.get("total_duration") or probe_dur(wav))
+    bt = sc.get("beat_times") or [[i * (total_dur / len(sc["beats"])), (i + 1) * (total_dur / len(sc["beats"]))] for i in range(len(sc["beats"]))]
+    prompts = [b["ai_prompt"] for b in sc["beats"]]
+    json.dump(prompts, open("/tmp/prompts.json", "w", encoding="utf-8"))
+    base_seed = int(time.time()) % 90000
 
-    with open(os.path.join(assets, "current_script.json"), "r", encoding="utf-8") as f:
-        script = json.load(f)
-    print(f"[*] Run ID: {script.get('run_id')} | Topic: {script.get('topic')}", flush=True)
+    encode_all_prompts(prompts)
+    n_gpus = torch.cuda.device_count()
+    print(f"[*] Detected {n_gpus} GPU(s)", flush=True)
+    if n_gpus >= 2:
+        env0, env1 = {**os.environ, "CUDA_VISIBLE_DEVICES": "0"}, {**os.environ, "CUDA_VISIBLE_DEVICES": "1"}
+        p0 = subprocess.Popen([sys.executable, __file__, "--worker", "0,1,2", str(base_seed)], env=env0)
+        p1 = subprocess.Popen([sys.executable, __file__, "--worker", "3,4", str(base_seed)], env=env1)
+        if p0.wait() != 0 or p1.wait() != 0: raise RuntimeError("Dual-GPU worker failed")
+    else:
+        render_indices(list(range(len(prompts))), prompts, base_seed)
 
-    audio_path = os.path.join(assets, "final_audio.wav")
-    ass_path = os.path.join(assets, "subtitles.ass")
-    srt_path = os.path.join(assets, "subtitles.srt")
-    beats = script.get("beats") or []
-    beat_times = script.get("beat_times")
-    total_dur = float(script.get("total_duration") or audio_duration(audio_path))
-    if not beat_times or len(beat_times) != len(beats):
-        step = total_dur / max(1, len(beats))
-        beat_times = [{"idx": i, "start": i * step, "end": (i + 1) * step} for i in range(len(beats))]
+    clips = []
+    for i in range(len(prompts)):
+        dur = max(1.6, (bt[i+1][0] - bt[i][0]) if i + 1 < len(bt) else (total_dur - bt[i][0]))
+        prep_beat(f"/tmp/raw_{i}.mp4", f"/tmp/clip_{i}.mp4", dur, i)
+        clips.append(f"/tmp/clip_{i}.mp4")
 
-    ensure_ai_packages()
-    wan_videos = generate_all_wan_videos(beats, TMP_DIR)
-
-    climax_idx = min(3, len(beats) - 1)
-    pieces = []
-    for i, bt in enumerate(beat_times):
-        bdur = max(1.5, float(bt["end"]) - float(bt["start"]))
-        p_out = os.path.join(TMP_DIR, f"piece_{i}.mp4")
-        process_video_beat(wan_videos[i], bdur, i, climax_idx, p_out)
-        pieces.append(p_out)
-
-    concat_txt = os.path.join(TMP_DIR, "pieces.txt")
-    with open(concat_txt, "w", encoding="utf-8") as f:
-        for p in pieces:
-            f.write(f"file '{p}'\n")
-    raw_concat = os.path.join(TMP_DIR, "concat.mp4")
-    subprocess.run([
-        "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
-        "-f", "concat", "-safe", "0", "-i", concat_txt, "-c", "copy", raw_concat,
-    ], check=True)
-
-    badge = "".join(c for c in str(script.get("hook_badge", "CLASSIFIED")) if c.isalnum() or c in " .,:+-")[:22]
-    font_opt = pick_font_option()
-    sub_local = os.path.join(TMP_DIR, "subs.ass" if os.path.exists(ass_path) else "subs.srt")
-    has_subs = os.path.exists(ass_path) or os.path.exists(srt_path)
-    if os.path.exists(ass_path):
-        shutil.copyfile(ass_path, sub_local)
-    elif os.path.exists(srt_path):
-        shutil.copyfile(srt_path, sub_local)
-
-    v_chain = ["vignette=PI/5"]
-    if badge:
-        v_chain.append("drawbox=x=270:y=105:w=540:h=68:color=black@0.62:t=fill")
-        v_chain.append("drawbox=x=270:y=105:w=10:h=68:color=0xFF2B2B:t=fill")
-        v_chain.append(f"drawtext={font_opt}text='{badge}':fontcolor=white:fontsize=32:x=(w-text_w)/2:y=124")
-    if has_subs:
-        esc = sub_local.replace(":", "\\:")
-        v_chain.append(f"subtitles={esc}")
-
-    fc = (
-        f"[0:v]{','.join(v_chain)}[base];"
-        f"[base][1:v]overlay=x='-1080+(t/{total_dur:.2f})*1080':y=0:shortest=1[outv]"
-    )
-
-    os.makedirs("/kaggle/working", exist_ok=True)
-    subprocess.run([
-        "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
-        "-i", raw_concat,
-        "-f", "lavfi", "-t", f"{total_dur:.2f}", "-i", "color=c=0xFF2222:s=1080x10",
-        "-i", audio_path,
-        "-filter_complex", fc,
-        "-map", "[outv]", "-map", "2:a:0", "-shortest",
-        "-c:v", "libx264", "-preset", "medium", "-crf", "18", "-pix_fmt", "yuv420p",
-        "-c:a", "aac", "-b:a", "192k", OUT_FILE,
-    ], check=True)
-
-    shutil.rmtree(TMP_DIR, ignore_errors=True)
-    print(f"[+] 100% Real AI Video Short Complete! {OUT_FILE} ({os.path.getsize(OUT_FILE)/(1024*1024):.2f} MB)", flush=True)
-
+    shutil.rmtree("/tmp/hf_cache", ignore_errors=True)
+    open("/tmp/list.txt", "w").write("\n".join(f"file '{c}'" for c in clips))
+    subprocess.run(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", "/tmp/list.txt", "-c", "copy", "/tmp/joined.mp4"], check=True)
+    shutil.copyfile(ass_src, "render_subs.ass")
+    vf = f"subtitles=render_subs.ass,drawbox=x=0:y=0:w='iw*min(1,t/{total_dur:.3f})':h=10:color=#E50914@0.95:t=fill"
+    subprocess.run(["ffmpeg", "-y", "-i", "/tmp/joined.mp4", "-i", wav, "-vf", vf, "-c:v", "libx264", "-preset", "medium", "-crf", "17", "-c:a", "aac", "-b:a", "192k", "-shortest", "final_output.mp4"], check=True)
+    for f in glob.glob("/tmp/raw_*.mp4") + glob.glob("/tmp/clip_*.mp4") + ["/tmp/joined.mp4", "/tmp/embeds.pt", "/tmp/prompts.json", "render_subs.ass"]:
+        if os.path.exists(f): os.remove(f)
+    print(f"[+] 10/10 Full-Quality Video Rendered in {(time.time()-t0)/60:.1f} min!", flush=True)
 
 if __name__ == "__main__":
     main()
