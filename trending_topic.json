@@ -1,15 +1,15 @@
 {
-  "theme": "EARTH",
-  "topic": "Largest Rogue Wave Ever Recorded",
-  "badge": "FILE #012 | EXTREME FORCE",
-  "case_number": 12,
-  "case_label": "FILE #012",
-  "easter_egg_code": "X-125",
+  "theme": "MYSTERY",
+  "topic": "Why No One Is Allowed to Visit This Lost Island: A Forbidden Place Story",
+  "badge": "FILE #013 | RESTRICTED ZONE",
+  "case_number": 13,
+  "case_label": "FILE #013",
+  "easter_egg_code": "V-134",
   "requested_by": "",
-  "angle": "FORBIDDEN_REASON: Real terrifying reason a place is sealed.",
-  "psych_strategy": "FORBIDDEN_REASON: Real terrifying reason a place is sealed.",
-  "fact_summary": "Rogue waves are large and unpredictable surface waves that can be extremely dangerous to ships and isolated structures such as lighthouses. They are distinct from tsunamis, which are long-wavelength waves, often almost unnoticeable in deep waters and caused by the displacement of water due to other phenomena. A rogue w",
-  "pillar": "Earth Fury",
-  "pillar_id": "extreme_weather",
-  "source_type": "yt_trend"
+  "angle": "TINY_FLAW_MEGA_DISASTER: How one small flaw caused total collapse.",
+  "psych_strategy": "TINY_FLAW_MEGA_DISASTER: How one small flaw caused total collapse.",
+  "fact_summary": "After \"Ser III No. 5,\" painted in 1920, sold for nearly 16 times its pre-sale estimate, critics charged that af Klint wanted to keep her \"holy body of work\" together in a temple, not spread across private collections",
+  "pillar": "Forbidden Places",
+  "pillar_id": "forbidden_places",
+  "source_type": "science_rss"
 }
