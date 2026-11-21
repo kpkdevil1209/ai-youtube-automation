@@ -1,13 +1,15 @@
 {
-  "theme": "COSMOS",
-  "topic": "Mysterious Radio Signal Caught Bursting From Long-Dead NASA Satellite",
-  "badge": "DEEP SPACE",
-  "angle": "FORBIDDEN_REASON: Reveal the real scientific or terrifying reason a place is sealed.",
-  "psych_strategy": "NASA's Time Bomb: The Shocking Signal from a Long-Gone Spacecraft",
-  "fact_summary": "This page is a list of the episodes of The Outer Limits, a 1995 science fiction/dark fantasy television series. The series was broadcast on Showtime from 1995 to 2000, and on the Sci Fi Channel in its final year (2001–2002).",
-  "pillar": "Cosmic Scale & Space Phenomena",
-  "pillar_id": "cosmic_horror",
-  "source_candidate": "Mysterious Radio Signal Caught Bursting From Long-Dead NASA Satellite",
-  "source_type": "google_news",
-  "created_utc": "2026-11-21T10:23:57.062756+00:00"
+  "theme": "OCEAN",
+  "topic": "Deep-Sea Expedition Reveals New Life Amidst Old Litter 4000m Down",
+  "badge": "FILE #009 | ABYSS DEPTH",
+  "case_number": 9,
+  "case_label": "FILE #009",
+  "easter_egg_code": "K-097",
+  "requested_by": "",
+  "angle": "TINY_FLAW_MEGA_DISASTER: How one small flaw caused total collapse.",
+  "psych_strategy": "TINY_FLAW_MEGA_DISASTER: How one small flaw caused total collapse.",
+  "fact_summary": "Both before and during World War II, the Empire of Japan committed numerous war crimes and crimes against humanity across various Asia-Pacific nations, most notably during the Second Sino-Japanese and Pacific Wars. These crimes have been referred to as \"the Asian Holocaust\" or \"Japan's Holocaust\", as well as the \"Rape ",
+  "pillar": "Deep Ocean",
+  "pillar_id": "deep_ocean",
+  "source_type": "google_news"
 }
