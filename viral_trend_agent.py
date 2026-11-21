@@ -8,14 +8,16 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
 
 USER_AGENT = "DevilOS-TrendEngine/4.0 (Documentary Research)"
-OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434/api/generate")
+OLLAMA_URL = os.getenv("OLLAMA_URL", "http://127.0.0.1:11434/api/generate")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:3b")
 HISTORY_FILE = "posted_history.json"
-OUTPUT_FILE = "current_topic.json"
+OUTPUT_FILE = "trending_topic.json"
 
 PILLARS = [
     {
         "id": "extreme_survival",
+        "theme": "SURVIVAL",
+        "badge": "SURVIVAL CASE",
         "name": "Extreme Human Survival & What-If",
         "news_queries": ["extreme survival rescued days lost", "cave diving trapped rescue science"],
         "yt_seeds": ["what happens if you get trapped in", "how long can a human survive without"],
@@ -24,6 +26,8 @@ PILLARS = [
     },
     {
         "id": "forbidden_places",
+        "theme": "MYSTERY",
+        "badge": "RESTRICTED ZONE",
         "name": "Forbidden Places & Sealed Mysteries",
         "news_queries": ["sealed ancient tomb discovered archaeologists", "forbidden island secret underground city"],
         "yt_seeds": ["why nobody is allowed to visit", "secret underground city discovered"],
@@ -32,6 +36,8 @@ PILLARS = [
     },
     {
         "id": "deep_ocean",
+        "theme": "OCEAN",
+        "badge": "ABYSS DEPTH",
         "name": "Deep Ocean & Abyssal Anomalies",
         "news_queries": ["deep sea discovery mariana trench ocean", "strange underwater anomaly oceanographers"],
         "yt_seeds": ["scariest thing found at the bottom of the ocean", "what happens at the bottom of mariana trench"],
@@ -40,6 +46,8 @@ PILLARS = [
     },
     {
         "id": "cosmic_horror",
+        "theme": "COSMOS",
+        "badge": "DEEP SPACE",
         "name": "Cosmic Scale & Space Phenomena",
         "news_queries": ["rogue planet black hole terrifying space discovery", "nasa unexplained signal deep space"],
         "yt_seeds": ["what happens if you fall into", "scariest thing discovered in space"],
@@ -48,6 +56,8 @@ PILLARS = [
     },
     {
         "id": "mega_disasters",
+        "theme": "DISASTER",
+        "badge": "CRITICAL FAILURE",
         "name": "Engineering Failures & Mega-Disasters",
         "news_queries": ["deepest hole earth engineering disaster", "submersible implosion physics megastructure"],
         "yt_seeds": ["why they sealed the deepest hole", "worst engineering disaster in history"],
@@ -56,6 +66,8 @@ PILLARS = [
     },
     {
         "id": "bizarre_nature",
+        "theme": "NATURE",
+        "badge": "DEADLY ZONE",
         "name": "Deadliest & Strangest Places on Earth",
         "news_queries": ["deadliest lake river bizarre natural phenomenon", "mysterious glowing cave boiling river"],
         "yt_seeds": ["deadliest place on earth you cant survive", "lake that turns animals into"],
@@ -64,6 +76,8 @@ PILLARS = [
     },
     {
         "id": "human_body_limits",
+        "theme": "BIOLOGY",
+        "badge": "HUMAN LIMIT",
         "name": "Extreme Human Body & Survival Limits",
         "news_queries": ["human body survival limit science extreme", "what happens body zero oxygen deep pressure"],
         "yt_seeds": ["what happens to your body after days without", "what happens to your body in deep space"],
@@ -72,6 +86,8 @@ PILLARS = [
     },
     {
         "id": "lost_expeditions",
+        "theme": "EXPEDITION",
+        "badge": "LOST RECORD",
         "name": "Vanished Expeditions & Ghost Mysteries",
         "news_queries": ["lost ship expedition vanished without trace found", "abandoned arctic station mystery"],
         "yt_seeds": ["expedition that vanished without a trace", "ghost ship found drifting with no crew"],
@@ -80,6 +96,8 @@ PILLARS = [
     },
     {
         "id": "prehistoric_earth",
+        "theme": "PREHISTORIC",
+        "badge": "ANCIENT EARTH",
         "name": "Prehistoric Monsters & Lost Earth Eras",
         "news_queries": ["giant prehistoric predator fossil discovered", "ancient earth era before humans extinction"],
         "yt_seeds": ["scariest prehistoric creature that actually existed", "what earth looked like before humans"],
@@ -88,6 +106,8 @@ PILLARS = [
     },
     {
         "id": "extreme_weather_earth",
+        "theme": "EARTH",
+        "badge": "EXTREME FORCE",
         "name": "Superstorms, Sinkholes & Earth Fury",
         "news_queries": ["giant sinkhole supervolcano rogue wave science", "extreme megatsunami geological event"],
         "yt_seeds": ["biggest rogue wave ever recorded", "what happens if a supervolcano erupts"],
@@ -229,8 +249,7 @@ def fetch_rss_feed(url):
     try:
         xml_data = http_get(url)
         root = ET.fromstring(xml_data)
-        items = root.findall(".//item")[:8]
-        for item in items:
+        for item in root.findall(".//item")[:8]:
             title = (item.findtext("title") or "").strip()
             desc = re.sub(r"<[^>]+>", " ", item.findtext("description") or "").strip()
             desc = re.sub(r"\s+", " ", desc)[:260]
@@ -332,7 +351,7 @@ def select_with_ollama(candidates, pillar, angle):
         "Rules:",
         "- Keep it grounded in the chosen real item (no fake claims).",
         "- Rewrite the topic into a punchy 6-11 word English curiosity title in Title Case.",
-        "- Avoid boring academic phrasing; focus on human survival, mystery, shock, or danger.",
+        "- Focus on human survival, mystery, shock, or extreme danger.",
         "- Output valid JSON ONLY with keys: index (int), topic (str), hook_angle (str).",
     ])
     payload = {
@@ -384,7 +403,7 @@ def main():
 
     chosen_pillar = None
     candidates = []
-    for p in eligible_pillars[:4]:
+    for p in eligible_pillars[:5]:
         found = collect_live_candidates(p, posted_titles)
         if found:
             chosen_pillar = p
@@ -392,7 +411,7 @@ def main():
             break
 
     if not candidates:
-        raise RuntimeError("No live candidates fetched from any source. Check network or feeds.")
+        raise RuntimeError("No live candidates fetched from any source.")
 
     angle = random.choice(CONTENT_ANGLES)
     try:
@@ -407,23 +426,25 @@ def main():
     fact_summary = base_item.get("summary") or fetch_wiki_fact(base_item["title"]) or fetch_wiki_fact(final_topic)
 
     out = {
+        "theme": chosen_pillar["theme"],
         "topic": final_topic,
-        "source_candidate": base_item["title"],
-        "source_type": base_item["source"],
+        "badge": chosen_pillar["badge"],
+        "angle": angle,
+        "psych_strategy": hook_angle,
+        "fact_summary": fact_summary,
         "pillar": chosen_pillar["name"],
         "pillar_id": chosen_pillar["id"],
-        "angle": angle,
-        "strategy": hook_angle,
-        "fact_summary": fact_summary,
+        "source_candidate": base_item["title"],
+        "source_type": base_item["source"],
         "created_utc": datetime.now(timezone.utc).isoformat(),
     }
     with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
         json.dump(out, f, indent=2, ensure_ascii=False)
 
     save_posted_history(raw_history, final_topic, chosen_pillar["id"])
-    print(f"[*] Pillar: {chosen_pillar['name']} | Live Candidates: {len(candidates)}")
-    print(f"[*] Source: {base_item['source']} -> {base_item['title']}")
-    print(f"[*] Selected Viral Topic: {final_topic}")
+    print(f"[*] Pillar: {chosen_pillar['name']} | Live Candidates: {len(candidates)}", flush=True)
+    print(f"[*] Source: {base_item['source']} -> {base_item['title']}", flush=True)
+    print(f"[*] Selected Viral Topic: {final_topic}", flush=True)
 
 
 if __name__ == "__main__":
