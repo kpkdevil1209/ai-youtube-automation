@@ -6,15 +6,13 @@ import shutil
 import subprocess
 import sys
 import time
+import traceback
 
 os.environ["HF_HOME"] = "/tmp/hf_cache"
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 OUT_FILE = "/kaggle/working/final_output.mp4"
 TMP_DIR = "/tmp/render_work"
-SDXL_BASE = "stabilityai/stable-diffusion-xl-base-1.0"
-SDXL_LIGHTNING = "ByteDance/SDXL-Lightning"
-SDXL_TURBO = "stabilityai/sdxl-turbo"
 WAN_MODEL = "Wan-AI/Wan2.1-T2V-1.3B-Diffusers"
 
 
@@ -36,7 +34,7 @@ def audio_duration(path):
 def ensure_ai_packages():
     if importlib.util.find_spec("hf_transfer") and importlib.util.find_spec("ftfy"):
         return
-    print("[*] Installing diffusers/Wan/SDXL + hf_transfer on Kaggle...", flush=True)
+    print("[*] Installing diffusers/Wan2.1 + hf_transfer on Kaggle...", flush=True)
     subprocess.check_call([
         sys.executable, "-m", "pip", "install", "-q", "-U",
         "diffusers>=0.32.2", "transformers>=4.49.0", "accelerate>=1.1.1",
@@ -55,74 +53,83 @@ def enable_fast_hf(flag=True):
     os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "0"
 
 
-def generate_sdxl_scenes(beats, out_dir):
-    import torch
-    from diffusers import EulerDiscreteScheduler, StableDiffusionXLPipeline, UNet2DConditionModel
-    from huggingface_hub import hf_hub_download
-    from safetensors.torch import load_file
-
-    enable_fast_hf(True)
-    scene_map = {}
-    t0 = time.time()
-    use_turbo = False
-    try:
-        print("[*] Loading SDXL-Lightning 4-step...", flush=True)
-        unet = UNet2DConditionModel.from_config(SDXL_BASE, subfolder="unet").to("cuda", torch.float16)
-        ckpt = hf_hub_download(SDXL_LIGHTNING, "sdxl_lightning_4step_unet.safetensors")
-        unet.load_state_dict(load_file(ckpt, device="cuda"))
-        pipe = StableDiffusionXLPipeline.from_pretrained(SDXL_BASE, unet=unet, torch_dtype=torch.float16, variant="fp16").to("cuda")
-        pipe.scheduler = EulerDiscreteScheduler.from_config(pipe.scheduler.config, timestep_spacing="trailing")
-    except Exception as e:
-        print(f"[!] SDXL-Lightning fallback to SDXL-Turbo ({e})", flush=True)
-        use_turbo = True
-        pipe = StableDiffusionXLPipeline.from_pretrained(SDXL_TURBO, torch_dtype=torch.float16, variant="fp16").to("cuda")
-
-    neg = "text, watermark, subtitles, cartoon, bright cheerful, deformed fingers, blurry"
-    w, h = (576, 1024) if use_turbo else (768, 1344)
-    for i, beat in enumerate(beats):
-        for tag, key in (("a", "shot_a"), ("b", "shot_b")):
-            raw_p = beat.get(key) or beat.get("narration") or "dark deep ocean mystery"
-            prompt = f"{raw_p}, 35mm dark cinema documentary still, dramatic moody shadows, volumetric light, ultra realistic"
-            img = pipe(prompt=prompt[:300], negative_prompt=neg, width=w, height=h, num_inference_steps=4, guidance_scale=0.0).images[0]
-            out_png = os.path.join(out_dir, f"scene_{i}_{tag}.png")
-            img.save(out_png)
-            scene_map[(i, tag)] = out_png
-
-    print(f"[+] Generated {len(scene_map)} unique HD AI scenes in {time.time()-t0:.1f}s!", flush=True)
-    del pipe
-    gc.collect()
-    torch.cuda.empty_cache()
-    shutil.rmtree("/tmp/hf_cache", ignore_errors=True)
-    return scene_map
-
-
-def generate_wan_hook(beat0, out_dir):
+def generate_all_wan_videos(beats, out_dir):
     import torch
     from diffusers import AutoencoderKLWan, WanPipeline
     from diffusers.utils import export_to_video
 
     enable_fast_hf(True)
+    gpu_name = torch.cuda.get_device_name(0)
+    print(f"[*] Loading {WAN_MODEL} on {gpu_name}...", flush=True)
     t0 = time.time()
+
     try:
-        print(f"[*] Loading {WAN_MODEL} on {torch.cuda.get_device_name(0)}...", flush=True)
-        vae = AutoencoderKLWan.from_pretrained(WAN_MODEL, subfolder="vae", torch_dtype=torch.float16)
+        vae = AutoencoderKLWan.from_pretrained(WAN_MODEL, subfolder="vae", torch_dtype=torch.float32)
         pipe = WanPipeline.from_pretrained(WAN_MODEL, vae=vae, torch_dtype=torch.float16)
-        pipe.enable_model_cpu_offload()
-        prompt = (beat0.get("shot_a") or beat0["narration"]) + ", photorealistic 35mm dark cinema, fluid camera motion, volumetric shadows"
-        neg = "blurry, low quality, text, watermark, subtitles, deformed faces, extra fingers, bright cartoon"
-        frames = pipe(prompt=prompt[:320], negative_prompt=neg, height=832, width=480, num_frames=33, num_inference_steps=18, guidance_scale=5.0).frames[0]
-        out_mp4 = os.path.join(out_dir, "ai_hook.mp4")
+    except Exception:
+        enable_fast_hf(False)
+        vae = AutoencoderKLWan.from_pretrained(WAN_MODEL, subfolder="vae", torch_dtype=torch.float32)
+        pipe = WanPipeline.from_pretrained(WAN_MODEL, vae=vae, torch_dtype=torch.float16)
+
+    try:
+        pipe.vae.enable_tiling()
+        pipe.vae.enable_slicing()
+    except Exception:
+        pass
+
+    seq_mode = False
+    pipe.enable_model_cpu_offload()
+    print(f"[+] Wan2.1 ready in {time.time() - t0:.1f}s", flush=True)
+
+    neg = "blurry, low quality, text, watermark, subtitles, deformed faces, extra fingers, bright cartoon, static image"
+    vid_files = []
+    for idx, beat in enumerate(beats):
+        raw_p = beat.get("ai_prompt") or beat.get("shot_a") or beat.get("narration") or "deep dark ocean storm"
+        prompt = f"{raw_p}, photorealistic 35mm dark cinema, dynamic camera movement, dramatic shadows"
+        steps = 22 if idx == 0 else 18
+        nframes = 41
+        t_clip = time.time()
+        print(f"[*] Generating Real AI Video [{idx + 1}/{len(beats)}] (480x832, {nframes}f, {steps}s)...", flush=True)
+        try:
+            frames = pipe(
+                prompt=prompt[:320],
+                negative_prompt=neg,
+                height=832,
+                width=480,
+                num_frames=nframes,
+                num_inference_steps=steps,
+                guidance_scale=5.0,
+            ).frames[0]
+        except Exception as e:
+            if not seq_mode and ("out of memory" in str(e).lower() or "cuda" in str(e).lower()):
+                print("[!] VRAM tight -> switching to sequential_cpu_offload and retrying...", flush=True)
+                gc.collect()
+                torch.cuda.empty_cache()
+                pipe.enable_sequential_cpu_offload()
+                seq_mode = True
+                frames = pipe(
+                    prompt=prompt[:320],
+                    negative_prompt=neg,
+                    height=832,
+                    width=480,
+                    num_frames=nframes,
+                    num_inference_steps=steps,
+                    guidance_scale=5.0,
+                ).frames[0]
+            else:
+                traceback.print_exc()
+                raise
+
+        out_mp4 = os.path.join(out_dir, f"wan_{idx}.mp4")
         export_to_video(frames, out_mp4, fps=16)
-        print(f"[+] Hero AI Video Hook saved in {time.time()-t0:.1f}s!", flush=True)
-        del pipe, vae
-        gc.collect()
-        torch.cuda.empty_cache()
-        return out_mp4
-    except Exception as e:
-        print(f"[!] Wan2.1 hook skipped ({e}); using SDXL motion hook.", flush=True)
-        return None
-    finally:
-        shutil.rmtree("/tmp/hf_cache", ignore_errors=True)
+        vid_files.append(out_mp4)
+        print(f"[+] Real AI Video [{idx + 1}/{len(beats)}] done in {time.time() - t_clip:.1f}s!", flush=True)
+
+    del pipe, vae
+    gc.collect()
+    torch.cuda.empty_cache()
+    shutil.rmtree("/tmp/hf_cache", ignore_errors=True)
+    return vid_files
 
 
 def pick_font_option():
@@ -135,38 +142,35 @@ def pick_font_option():
     return ""
 
 
-def make_motion_piece(src, dur, is_video, sub_idx, is_climax, out_mp4):
-    motions = [
-        "crop=1080:1920:x='(iw-ow)/2+48*(t/{D}-0.5)':y='(ih-oh)/2-36*(t/{D}-0.5)'",
-        "crop=1080:1920:x='(iw-ow)/2-48*(t/{D}-0.5)':y='(ih-oh)/2+40*(t/{D}-0.5)'",
-        "crop=1080:1920:x='(iw-ow)/2+10*sin(t*12)':y='(ih-oh)/2-44*(t/{D}-0.5)+8*cos(t*10)'",
-        "crop=1080:1920:x='(iw-ow)/2-40*(t/{D}-0.5)':y='(ih-oh)/2-36*(t/{D}-0.5)'",
-    ]
-    crop_expr = motions[sub_idx % 4].replace("{D}", f"{max(0.5, dur):.3f}")
-    flash = ":brightness='0.28*between(t,0,0.16)':eval=frame" if is_climax else ":brightness=-0.03"
-    slow = "setpts=1.35*PTS," if is_video else ""
-    vf = (
-        f"{slow}scale=1220:2168:force_original_aspect_ratio=increase:flags=lanczos,"
-        f"{crop_expr},eq=contrast=1.14:saturation=0.88{flash},"
-        "noise=alls=6:allf=t,unsharp=5:5:0.6:5:5:0.15,fps=30"
-    )
-    cmd = ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error"]
-    if is_video:
-        cmd.extend(["-stream_loop", "-1", "-i", src])
+def process_video_beat(src, dur, idx, climax_idx, out_mp4):
+    dur_s = max(1.0, dur)
+    if idx == 0:
+        crop = "crop=1080:1920:x='(iw-ow)/2+12*sin(t*14)':y='(ih-oh)/2+10*cos(t*12)'"
+        flash = ":brightness='0.26*between(t,0,0.14)':eval=frame"
+    elif idx == climax_idx:
+        crop = f"crop=1080:1920:x='(iw-ow)/2+14*sin(t*16)':y='(ih-oh)/2-36*(t/{dur_s:.2f}-0.5)'"
+        flash = ":brightness='0.30*between(t,0,0.16)':eval=frame"
     else:
-        cmd.extend(["-loop", "1", "-framerate", "30", "-i", src])
-    cmd.extend([
-        "-t", f"{dur:.3f}", "-vf", vf, "-an",
-        "-c:v", "libx264", "-preset", "ultrafast", "-crf", "15",
+        crop = f"crop=1080:1920:x='(iw-ow)/2+36*(t/{dur_s:.2f}-0.5)':y='(ih-oh)/2-28*(t/{dur_s:.2f}-0.5)'"
+        flash = ":brightness=-0.03"
+
+    vf = (
+        f"setpts=1.40*PTS,scale=1180:2098:force_original_aspect_ratio=increase:flags=lanczos,"
+        f"{crop},eq=contrast=1.14:saturation=0.90{flash},"
+        "noise=alls=5:allf=t,unsharp=5:5:0.65:5:5:0.15,fps=30"
+    )
+    subprocess.run([
+        "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+        "-stream_loop", "-1", "-i", src, "-t", f"{dur:.3f}",
+        "-vf", vf, "-an", "-c:v", "libx264", "-preset", "ultrafast", "-crf", "15",
         "-video_track_timescale", "30000", "-pix_fmt", "yuv420p", out_mp4,
-    ])
-    subprocess.run(cmd, check=True)
+    ], check=True)
 
 
 def main():
     import torch
     if not torch.cuda.is_available():
-        raise RuntimeError("Kaggle GPU required for Full-AI Cinema generation")
+        raise RuntimeError("Kaggle GPU required for Wan2.1 Real Video generation")
 
     assets = find_assets_dir()
     print(f"[*] Assets dir: {assets} | Files: {sorted(os.listdir(assets))}", flush=True)
@@ -188,27 +192,15 @@ def main():
         beat_times = [{"idx": i, "start": i * step, "end": (i + 1) * step} for i in range(len(beats))]
 
     ensure_ai_packages()
-    scene_map = generate_sdxl_scenes(beats, TMP_DIR)
-    hook_mp4 = generate_wan_hook(beats[0], TMP_DIR)
+    wan_videos = generate_all_wan_videos(beats, TMP_DIR)
 
+    climax_idx = min(3, len(beats) - 1)
     pieces = []
-    sub_idx = 0
     for i, bt in enumerate(beat_times):
-        bdur = max(1.2, float(bt["end"]) - float(bt["start"]))
-        half1 = round(bdur * 0.50, 3)
-        half2 = round(max(0.6, bdur - half1), 3)
-
-        p1 = os.path.join(TMP_DIR, f"p_{i}_a.mp4")
-        use_vid = (i == 0 and hook_mp4 and os.path.exists(hook_mp4))
-        src1 = hook_mp4 if use_vid else scene_map[(i, "a")]
-        make_motion_piece(src1, half1, use_vid, sub_idx, i == 4, p1)
-        pieces.append(p1)
-        sub_idx += 1
-
-        p2 = os.path.join(TMP_DIR, f"p_{i}_b.mp4")
-        make_motion_piece(scene_map[(i, "b")], half2, False, sub_idx, False, p2)
-        pieces.append(p2)
-        sub_idx += 1
+        bdur = max(1.5, float(bt["end"]) - float(bt["start"]))
+        p_out = os.path.join(TMP_DIR, f"piece_{i}.mp4")
+        process_video_beat(wan_videos[i], bdur, i, climax_idx, p_out)
+        pieces.append(p_out)
 
     concat_txt = os.path.join(TMP_DIR, "pieces.txt")
     with open(concat_txt, "w", encoding="utf-8") as f:
@@ -256,7 +248,7 @@ def main():
     ], check=True)
 
     shutil.rmtree(TMP_DIR, ignore_errors=True)
-    print(f"[+] V3 Cinema Render Complete! {OUT_FILE} ({os.path.getsize(OUT_FILE)/(1024*1024):.2f} MB)", flush=True)
+    print(f"[+] 100% Real AI Video Short Complete! {OUT_FILE} ({os.path.getsize(OUT_FILE)/(1024*1024):.2f} MB)", flush=True)
 
 
 if __name__ == "__main__":
