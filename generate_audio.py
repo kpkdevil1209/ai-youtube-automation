@@ -40,13 +40,13 @@ def synth_kokoro_beats(beats, theme):
     use_gb = theme in ("SPACE", "MYSTERY")
     voice = "bm_george" if use_gb else "am_adam"
     lang = "en-gb" if use_gb else "en-us"
-    print(f"[*] Kokoro-82M Narrator: {voice} ({lang})", flush=True)
+    print(f"[*] Kokoro-82M Clear Narrator: {voice} ({lang}, speed=0.96)", flush=True)
 
     beat_files = []
     for i, b in enumerate(beats):
         raw = f"tmp_b_{i}.wav"
         clean = f"beat_v_{i}.wav"
-        samples, sr = kokoro.create(b["narration"], voice=voice, speed=1.08, lang=lang)
+        samples, sr = kokoro.create(b["narration"], voice=voice, speed=0.96, lang=lang)
         sf.write(raw, samples, sr)
         clean_speech(raw, clean)
         os.remove(raw)
@@ -56,7 +56,7 @@ def synth_kokoro_beats(beats, theme):
 
 async def _edge_one(text, voice, out_mp3):
     import edge_tts
-    comm = edge_tts.Communicate(text, voice, rate="+8%", pitch="-2Hz")
+    comm = edge_tts.Communicate(text, voice, rate="+0%", pitch="-2Hz")
     await comm.save(out_mp3)
 
 
@@ -103,7 +103,7 @@ def style_ass_chunk(chunk):
             styled.append(t)
     if not highlighted and styled:
         styled[-1] = "{\\c&H0000D7FF&}" + styled[-1] + "{\\c&H00FFFFFF&}"
-    return "{\\fscx112\\fscy112\\t(0,95,\\fscx100\\fscy100)}" + " ".join(styled)
+    return "{\\fscx114\\fscy114\\t(0,100,\\fscx100\\fscy100)}" + " ".join(styled)
 
 
 def build_captions(beats, beat_times):
@@ -138,7 +138,7 @@ def build_captions(beats, beat_times):
         "",
         "[V4+ Styles]",
         "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
-        "Style: Default,DejaVu Sans,68,&H00FFFFFF,&H0000D7FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,6,2,2,60,60,470,1",
+        "Style: Default,DejaVu Sans,72,&H00FFFFFF,&H0000D7FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,6,2,2,60,60,480,1",
         "",
         "[Events]",
         "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
@@ -164,14 +164,14 @@ def main():
 
     subprocess.run([
         "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
-        "-f", "lavfi", "-i", "anullsrc=r=44100:cl=mono", "-t", "0.13", "gap.wav",
+        "-f", "lavfi", "-i", "anullsrc=r=44100:cl=mono", "-t", "0.14", "gap.wav",
     ], check=True)
     subprocess.run([
         "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
         "-f", "lavfi", "-i", "anullsrc=r=44100:cl=mono", "-t", "0.32", "drop_gap.wav",
     ], check=True)
 
-    climax_idx = min(4, len(beat_files) - 1)
+    climax_idx = min(3, len(beat_files) - 1)
     beat_times = []
     cursor = 0.0
     concat_inputs = []
@@ -181,7 +181,7 @@ def main():
             concat_inputs.append("drop_gap.wav")
             cursor += 0.32
         start = round(cursor, 3)
-        end = round(cursor + d + 0.13, 3)
+        end = round(cursor + d + 0.14, 3)
         beat_times.append({"idx": i, "start": start, "end": end})
         concat_inputs.extend([wf, "gap.wav"])
         cursor = end
@@ -214,8 +214,8 @@ def main():
         "equalizer=f=3200:width_type=h:width=800:g=2.5,acompressor=threshold=-16dB:ratio=3,volume=1.38[vox]",
         f"[1:a]lowpass=f=220,volume='if(between(t,{drop0:.2f},{climax_start:.2f}),0,0.22)':eval=frame,"
         f"afade=t=in:st=0:d=0.5,afade=t=out:st={total_dur-0.7:.2f}:d=0.7[bgm]",
-        "[2:a]volume=0.55[b0]",
-        f"[3:a]volume=0.58,adelay={climax_ms}|{climax_ms}[b4]",
+        "[2:a]volume=0.58[b0]",
+        f"[3:a]volume=0.60,adelay={climax_ms}|{climax_ms}[b4]",
     ]
     mix_labels = ["[vox]", "[bgm]", "[b0]", "[b4]"]
 
