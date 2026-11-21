@@ -1,8 +1,8 @@
-name: DEVIL UNIVERSE - Full Kaggle AI Shorts Engine
+name: SILENT SIGNAL - Full Kaggle T4 AI Shorts Engine
 
 on:
   schedule:
-    - cron: '0 13,18,23 * * *' # 3x Daily US/UK Global Prime-Time
+    - cron: '0 13,18,23 * * *'
   workflow_dispatch:
 
 permissions:
@@ -119,7 +119,7 @@ jobs:
           fi
           chmod 600 ~/.kaggle/kaggle.json
 
-      - name: Step 6 - Kaggle GPU Full AI Video & Cinema Render
+      - name: Step 6 - Kaggle T4 x2 GPU Full AI Video Render
         run: |
           rm -rf kaggle_assets && mkdir -p kaggle_assets
           cp -f final_audio.wav current_script.json kaggle_assets/
@@ -129,22 +129,30 @@ jobs:
           echo "[*] Waiting 50s for Kaggle dataset indexing..."
           sleep 50
 
-          python3 -c 'import json, os, re; u=json.load(open(os.path.expanduser("~/.kaggle/kaggle.json")))["username"]; p="kaggle_render/kernel-metadata.json"; m=json.load(open(p)); s=re.sub(r"[^a-z0-9-]+","-",m.get("id",f"{u}/devil-video-render-engine").split("/")[-1].lower()).strip("-") or "devil-video-render-engine"; m["id"]=f"{u}/{s}"; m["title"]=s; m["enable_gpu"]=True; m["enable_internet"]=True; m["dataset_sources"]=[f"{u}/devil-insanity-assets"]; json.dump(m,open(p,"w"),indent=2); print("Synced:",m["id"],"GPU:",m["enable_gpu"])'
+          echo "[*] Checking existing Kaggle kernels..."
+          kaggle kernels list --mine --page-size 5 || true
+
+          python3 -c 'import json, os, re; u=json.load(open(os.path.expanduser("~/.kaggle/kaggle.json")))["username"]; p="kaggle_render/kernel-metadata.json"; m=json.load(open(p)); s=re.sub(r"[^a-z0-9-]+","-",m.get("id",f"{u}/silent-signal-render-v2").split("/")[-1].lower()).strip("-") or "silent-signal-render-v2"; s="silent-signal-render-v2" if s=="devil-video-render-engine" else s; m["id"]=f"{u}/{s}"; m["title"]=s; m["enable_gpu"]=True; m["enable_internet"]=True; m["dataset_sources"]=[f"{u}/devil-insanity-assets"]; json.dump(m,open(p,"w"),indent=2); print("Synced:",m["id"],"GPU:",m["enable_gpu"])'
           set +e
-          PUSH_OUT=$(kaggle kernels push -p kaggle_render 2>&1)
+          PUSH_OUT=$(kaggle kernels push -p kaggle_render --accelerator NvidiaTeslaT4 2>&1)
           PUSH_RC=$?
+          if [ $PUSH_RC -ne 0 ] && echo "$PUSH_OUT" | grep -qiE "unrecognized|invalid|accelerator"; then
+            PUSH_OUT=$(kaggle kernels push -p kaggle_render 2>&1)
+            PUSH_RC=$?
+          fi
           set -e
           echo "$PUSH_OUT"
           if [ $PUSH_RC -ne 0 ] || echo "$PUSH_OUT" | grep -qi "409"; then
-            NEW_SLUG="devil-ai-v${{ github.run_number }}-${{ github.run_attempt }}-$(date +%s | tail -c 5)"
+            NEW_SLUG="silent-sig-v${{ github.run_number }}-${{ github.run_attempt }}-$(date +%s | tail -c 5)"
             python3 -c 'import json, os, sys; ns=sys.argv[1]; u=json.load(open(os.path.expanduser("~/.kaggle/kaggle.json")))["username"]; p="kaggle_render/kernel-metadata.json"; m=json.load(open(p)); m["id"]=f"{u}/{ns}"; m["title"]=ns; m["enable_gpu"]=True; m["enable_internet"]=True; m["dataset_sources"]=[f"{u}/devil-insanity-assets"]; json.dump(m,open(p,"w"),indent=2)' "$NEW_SLUG"
-            kaggle kernels push -p kaggle_render
+            kaggle kernels push -p kaggle_render --accelerator NvidiaTeslaT4 || kaggle kernels push -p kaggle_render
           fi
           KERNEL_ID=$(python3 -c 'import json; print(json.load(open("kaggle_render/kernel-metadata.json"))["id"])')
-          echo "[*] Polling Kaggle GPU Kernel: $KERNEL_ID"
-          for i in $(seq 1 160); do
+          echo "[*] Polling Kaggle T4 x2 Kernel: $KERNEL_ID"
+          Q_COUNT=0
+          for i in $(seq 1 140); do
             STATUS_OUT=$(kaggle kernels status "$KERNEL_ID" 2>&1 || true)
-            echo "[$i/160] $STATUS_OUT"
+            echo "[$i/140] $STATUS_OUT"
             if echo "$STATUS_OUT" | grep -qi "complete"; then
               break
             fi
@@ -152,6 +160,13 @@ jobs:
               kaggle kernels output "$KERNEL_ID" -p . || true
               cat *.log 2>/dev/null || true
               exit 1
+            fi
+            if echo "$STATUS_OUT" | grep -qi "queued"; then
+              Q_COUNT=$((Q_COUNT + 1))
+              if [ "$Q_COUNT" -ge 60 ]; then
+                echo "[!] Stuck in QUEUED 15+ min. Check Kaggle 30h weekly GPU quota!"
+                exit 1
+              fi
             fi
             sleep 15
           done
