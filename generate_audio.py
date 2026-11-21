@@ -1,249 +1,147 @@
-import asyncio
-import json
-import os
-import re
-import subprocess
-import wave
+import os, re, json, asyncio, subprocess, numpy as np, soundfile as sf
 
-SCRIPT_FILE = "current_script.json"
-KOKORO_MODEL = os.path.expanduser("~/.cache/kokoro/kokoro-v1.0.onnx")
-KOKORO_VOICES = os.path.expanduser("~/.cache/kokoro/voices-v1.0.bin")
+SR, SCRIPT_FILE = 24000, "current_script.json"
+K_DIR = os.path.expanduser("~/.cache/kokoro")
+POWER = {"NEVER", "DEAD", "ZERO", "SEALED", "TRAP", "KILLED", "VANISHED", "CRASH", "COLLAPSE", "TOXIC", "BANNED", "SECRET", "DARK", "SECONDS", "STOP", "SURVIVE", "FROZEN"}
+_KOKORO = None
 
-DANGER_WORDS = {
-    "DEAD", "DEATH", "DIE", "DIES", "ZERO", "NEVER", "STOP", "BLOOD",
-    "CRUSH", "BLIND", "VOID", "DARK", "BANNED", "SEALED", "TRAP", "TRAPPED",
-    "KILL", "GHOST", "SCREAM", "TERRIFYING", "INSTANT", "EXPLODE", "FINAL",
-    "SECONDS", "SECOND", "MINUTES", "METERS", "MILES", "ALONE", "SILENT",
-}
+def get_kokoro():
+    global _KOKORO
+    if _KOKORO is None:
+        m, v = os.path.join(K_DIR, "kokoro-v1.0.onnx"), os.path.join(K_DIR, "voices-v1.0.bin")
+        if os.path.exists(m) and os.path.exists(v):
+            from kokoro_onnx import Kokoro
+            _KOKORO = Kokoro(m, v)
+    return _KOKORO
 
+def trim_sil(y, thr=0.008):
+    idx = np.where(np.abs(y) > thr)[0]
+    if len(idx) == 0: return y
+    return y[max(0, idx[0] - int(SR * 0.03)):min(len(y), idx[-1] + int(SR * 0.05))]
 
-def wav_duration(path):
-    with wave.open(path, "rb") as w:
-        return w.getnframes() / float(w.getframerate())
-
-
-def clean_speech(in_wav, out_wav):
-    cmd = [
-        "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
-        "-i", in_wav,
-        "-af", "silenceremove=start_periods=1:start_threshold=-42dB:start_duration=0.02,aresample=44100",
-        "-ac", "1", out_wav,
-    ]
-    subprocess.run(cmd, check=True)
-
-
-def synth_kokoro_beats(beats, theme):
-    import soundfile as sf
-    from kokoro_onnx import Kokoro
-
-    kokoro = Kokoro(KOKORO_MODEL, KOKORO_VOICES)
-    use_gb = theme in ("SPACE", "MYSTERY")
-    voice = "bm_george" if use_gb else "am_adam"
-    lang = "en-gb" if use_gb else "en-us"
-    print(f"[*] Kokoro-82M Clear Narrator: {voice} ({lang}, speed=0.96)", flush=True)
-
-    beat_files = []
-    for i, b in enumerate(beats):
-        raw = f"tmp_b_{i}.wav"
-        clean = f"beat_v_{i}.wav"
-        samples, sr = kokoro.create(b["narration"], voice=voice, speed=0.96, lang=lang)
-        sf.write(raw, samples, sr)
-        clean_speech(raw, clean)
-        os.remove(raw)
-        beat_files.append(clean)
-    return beat_files
-
-
-async def _edge_one(text, voice, out_mp3):
+def speak(text, speed=0.95):
+    k = get_kokoro()
+    if k is not None:
+        y, s = k.create(text, voice="am_adam", speed=speed, lang="en-us")
+        if s != SR: y = np.interp(np.linspace(0, len(y), int(len(y) * SR / s)), np.arange(len(y)), y)
+        return trim_sil(np.asarray(y, dtype=np.float32))
     import edge_tts
-    comm = edge_tts.Communicate(text, voice, rate="+0%", pitch="-2Hz")
-    await comm.save(out_mp3)
+    asyncio.run(edge_tts.Communicate(text, "en-US-AndrewNeural", rate="-4%").save("_tts.mp3"))
+    subprocess.run(["ffmpeg", "-y", "-i", "_tts.mp3", "-ar", str(SR), "-ac", "1", "_tts.wav"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    y, _ = sf.read("_tts.wav", dtype="float32")
+    return trim_sil(y)
 
+def sonic_stamp():
+    t = np.linspace(0, 0.20, int(SR * 0.20), False)
+    y = (np.sin(2 * np.pi * (56 - 22 * (t / 0.20)) * t) * np.exp(-t * 11) * 0.65 + np.sin(2 * np.pi * 890 * t) * np.exp(-t * 22) * 0.32).astype(np.float32)
+    y[-240:] *= np.linspace(1, 0, 240)
+    return y
 
-def synth_edge_fallback(beats, theme):
-    voice = "en-GB-RyanNeural" if theme in ("SPACE", "MYSTERY") else "en-US-AndrewMultilingualNeural"
-    print(f"[!] Fallback Edge-TTS Narrator: {voice}", flush=True)
-    beat_files = []
-    for i, b in enumerate(beats):
-        mp3 = f"tmp_b_{i}.mp3"
-        clean = f"beat_v_{i}.wav"
-        asyncio.run(_edge_one(b["narration"], voice, mp3))
-        clean_speech(mp3, clean)
-        os.remove(mp3)
-        beat_files.append(clean)
-    return beat_files
+def tension_bed(dur):
+    t = np.linspace(0, dur, int(SR * dur), False)
+    pulse = np.clip(np.sin(2 * np.pi * 2.2 * t), 0, 1) ** 3
+    return (np.sin(2 * np.pi * (44 + 14 * (t / max(0.1, dur))) * t) * (0.04 + 0.05 * pulse)).astype(np.float32)
 
+def whoosh(dur=0.24):
+    n = int(SR * dur)
+    return (np.convolve(np.random.randn(n), np.ones(12) / 12, mode="same") * (np.sin(np.linspace(0, np.pi, n)) ** 1.6) * 0.16).astype(np.float32)
 
-def fmt_srt_time(sec):
-    ms = int(round(max(0.0, sec) * 1000))
-    h, rem = divmod(ms, 3600000)
-    m, rem = divmod(rem, 60000)
-    s, ms = divmod(rem, 1000)
-    return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
+def sub_boom(dur=0.50):
+    t = np.linspace(0, dur, int(SR * dur), False)
+    return (np.sin(2 * np.pi * (54 - 24 * (t / dur)) * t) * np.exp(-t * 6.5) * 0.58).astype(np.float32)
 
+def lock_click():
+    t = np.linspace(0, 0.06, int(SR * 0.06), False)
+    return (np.sin(2 * np.pi * 1650 * t) * np.exp(-t * 85) * 0.30).astype(np.float32)
 
-def fmt_ass_time(sec):
-    cs_tot = int(round(max(0.0, sec) * 100))
-    h, rem = divmod(cs_tot, 360000)
-    m, rem = divmod(rem, 6000)
-    s, cs = divmod(rem, 100)
-    return f"{h}:{m:02d}:{s:02d}.{cs:02d}"
+def ts_ass(t): return f"{int(t//3600)}:{int((t%3600)//60):02d}:{int(t%60):02d}.{int((t%1)*100):02d}"
+def ts_srt(t): return f"{int(t//3600):02d}:{int((t%3600)//60):02d}:{int(t%60):02d},{int((t%1)*1000):03d}"
 
-
-def style_ass_chunk(chunk):
-    tokens = chunk.upper().split()
-    styled = []
-    highlighted = False
-    for t in tokens:
-        bare = re.sub(r"[^A-Z0-9]", "", t)
-        if bare in DANGER_WORDS or any(c.isdigit() for c in bare):
-            styled.append("{\\c&H003B3BFF&}" + t + "{\\c&H00FFFFFF&}")
-            highlighted = True
-        else:
-            styled.append(t)
-    if not highlighted and styled:
-        styled[-1] = "{\\c&H0000D7FF&}" + styled[-1] + "{\\c&H00FFFFFF&}"
-    return "{\\fscx114\\fscy114\\t(0,100,\\fscx100\\fscy100)}" + " ".join(styled)
-
-
-def build_captions(beats, beat_times):
-    srt_entries = []
-    ass_events = []
-    idx = 1
-    for b, bt in zip(beats, beat_times):
-        words = b["narration"].split()
-        if not words:
-            continue
-        chunks = [" ".join(words[k:k + 3]) for k in range(0, len(words), 3)]
-        span = max(0.4, (bt["end"] - bt["start"]) - 0.1)
-        step = span / len(chunks)
-        for j, ch in enumerate(chunks):
-            t0 = bt["start"] + j * step
-            t1 = min(bt["end"], t0 + step)
-            srt_entries.append(f"{idx}\n{fmt_srt_time(t0)} --> {fmt_srt_time(t1)}\n{ch.upper()}\n")
-            ass_events.append(f"Dialogue: 0,{fmt_ass_time(t0)},{fmt_ass_time(t1)},Default,,0,0,0,,{style_ass_chunk(ch)}")
-            idx += 1
-
-    srt_text = "\n".join(srt_entries)
-    for fname in ("subtitles.srt", "subtitles_en.srt"):
-        with open(fname, "w", encoding="utf-8") as f:
-            f.write(srt_text)
-
-    ass_header = "\n".join([
-        "[Script Info]",
-        "ScriptType: v4.00+",
-        "PlayResX: 1080",
-        "PlayResY: 1920",
-        "WrapStyle: 2",
-        "",
-        "[V4+ Styles]",
-        "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
-        "Style: Default,DejaVu Sans,72,&H00FFFFFF,&H0000D7FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,6,2,2,60,60,480,1",
-        "",
-        "[Events]",
-        "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
-    ])
-    with open("subtitles.ass", "w", encoding="utf-8") as f:
-        f.write(ass_header + "\n" + "\n".join(ass_events) + "\n")
-
+def color_pop(txt):
+    out = []
+    for w in txt.split():
+        cl = re.sub(r"[^A-Za-z0-9]", "", w).upper()
+        if cl in POWER or any(c.isdigit() for c in cl): out.append(r"{\c&H0000D7FF&}" + w.upper() + r"{\c&H00FFFFFF&}")
+        elif cl.endswith(("?", "!")): out.append(r"{\c&H003B3BFF&}" + w.upper() + r"{\c&H00FFFFFF&}")
+        else: out.append(w.upper())
+    return " ".join(out)
 
 def main():
-    with open(SCRIPT_FILE, "r", encoding="utf-8") as f:
-        data = json.load(f)
-    beats = data["beats"]
-    theme = data.get("theme", "OCEAN")
+    sc = json.load(open(SCRIPT_FILE, encoding="utf-8"))
+    beats = sc["beats"]
+    b0 = beats[0]
+    hq = speak(b0.get("hook_question", b0["narration"]), speed=1.03)
+    esc = speak(b0.get("escalation_line", ""), speed=0.98) if b0.get("escalation_line") else np.zeros(0, np.float32)
 
-    if os.path.exists(KOKORO_MODEL) and os.path.exists(KOKORO_VOICES):
-        try:
-            beat_files = synth_kokoro_beats(beats, theme)
-        except Exception as e:
-            print(f"[!] Kokoro error ({e}), using fallback...", flush=True)
-            beat_files = synth_edge_fallback(beats, theme)
-    else:
-        beat_files = synth_edge_fallback(beats, theme)
+    parts, cues, cur = [sonic_stamp()], [], 0.20
+    hq_end = cur + len(hq) / SR
+    cues.append((cur, hq_end, b0.get("hook_question", b0["narration"])))
+    parts.append(hq); cur = hq_end
+    if len(esc) > 0:
+        parts.append(np.zeros(int(SR * 0.04), np.float32)); cur += 0.04
+        esc_end = cur + len(esc) / SR
+        cues.append((cur, esc_end, b0["escalation_line"]))
+        parts.append(esc); cur = esc_end
+    b0_end = cur
+    beat_times = [[0.0, round(b0_end, 3)]]
 
-    subprocess.run([
-        "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
-        "-f", "lavfi", "-i", "anullsrc=r=44100:cl=mono", "-t", "0.14", "gap.wav",
-    ], check=True)
-    subprocess.run([
-        "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
-        "-f", "lavfi", "-i", "anullsrc=r=44100:cl=mono", "-t", "0.32", "drop_gap.wav",
-    ], check=True)
+    climax_idx, climax_time = min(3, len(beats) - 1), b0_end
+    for i in range(1, len(beats)):
+        gap = 0.32 if i == climax_idx else 0.06
+        parts.append(np.zeros(int(SR * gap), np.float32)); cur += gap
+        if i == climax_idx: climax_time = cur
+        v = speak(beats[i]["narration"], speed=0.95)
+        st, en = cur, cur + len(v) / SR
+        cues.append((st, en, beats[i]["narration"]))
+        parts.append(v); beat_times.append([round(st, 3), round(en, 3)]); cur = en
 
-    climax_idx = min(3, len(beat_files) - 1)
-    beat_times = []
-    cursor = 0.0
-    concat_inputs = []
-    for i, wf in enumerate(beat_files):
-        d = wav_duration(wf)
-        if i == climax_idx and i > 0:
-            concat_inputs.append("drop_gap.wav")
-            cursor += 0.32
-        start = round(cursor, 3)
-        end = round(cursor + d + 0.14, 3)
-        beat_times.append({"idx": i, "start": start, "end": end})
-        concat_inputs.extend([wf, "gap.wav"])
-        cursor = end
+    parts.append(np.zeros(int(SR * 0.08), np.float32))
+    master = np.concatenate(parts).astype(np.float32)
+    bed = tension_bed(min(2.6, b0_end))
+    master[:len(bed)] += bed
+    lc = lock_click(); idx_lc = int(min(2.40, b0_end) * SR)
+    if idx_lc + len(lc) < len(master): master[idx_lc:idx_lc+len(lc)] += lc
+    for i in range(1, len(beat_times)):
+        t_cut = beat_times[i][0]
+        if i == climax_idx:
+            bm = sub_boom(); p = int(t_cut * SR)
+            if p + len(bm) < len(master): master[p:p+len(bm)] += bm
+        else:
+            wh = whoosh(); p = max(0, int((t_cut - 0.12) * SR))
+            if p + len(wh) < len(master): master[p:p+len(wh)] += wh
 
-    with open("vconcat.txt", "w", encoding="utf-8") as f:
-        for p in concat_inputs:
-            f.write(f"file '{p}'\n")
-    subprocess.run([
-        "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
-        "-f", "concat", "-safe", "0", "-i", "vconcat.txt", "-c", "copy", "voice_full.wav",
-    ], check=True)
+    master = master * (0.92 / float(np.max(np.abs(master)) or 1.0))
+    sf.write("final_audio.wav", master, SR, subtype="PCM_16")
+    total_dur = len(master) / SR
 
-    total_dur = max(12.0, wav_duration("voice_full.wav") + 0.35)
-    climax_start = beat_times[climax_idx]["start"]
-    drop0 = max(0.5, climax_start - 0.34)
-    climax_ms = int(climax_start * 1000)
-
-    drone_expr = "0.45*sin(2*PI*55*t)+0.28*sin(2*PI*82.4*t)+0.18*sin(2*PI*110*t)*sin(2*PI*0.35*t)"
-    boom_expr = "sin(2*PI*(95*exp(-3*t))*t)*exp(-4.2*t)"
-
-    cmd = [
-        "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
-        "-i", "voice_full.wav",
-        "-f", "lavfi", "-t", f"{total_dur:.2f}", "-i", f"aevalsrc={drone_expr}:s=44100",
-        "-f", "lavfi", "-t", "1.1", "-i", f"aevalsrc={boom_expr}:s=44100",
-        "-f", "lavfi", "-t", "1.1", "-i", f"aevalsrc={boom_expr}:s=44100",
+    ass = [
+        "[Script Info]\nScriptType: v4.00+\nPlayResX: 1080\nPlayResY: 1920\n",
+        "[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
+        "Style: Flash,Arial Black,88,&H0000D7FF,&H00FFFFFF,&H00000000,&H80000000,-1,0,0,0,100,100,1,0,1,6,2,5,40,40,40,1",
+        "Style: Stamp,Arial,34,&H00FFFFFF,&H00FFFFFF,&H00000000,&H90000000,-1,0,0,0,100,100,1,0,1,3,1,7,40,40,40,1",
+        "Style: Egg,Arial,28,&H00FFD800,&H00FFFFFF,&H00000000,&H80000000,-1,0,0,0,100,100,1,0,1,3,1,9,40,40,40,1",
+        "Style: Cap,Arial Black,68,&H00FFFFFF,&H0000D7FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,5,2,2,45,45,510,1",
+        "\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
+        f"Dialogue: 2,{ts_ass(0.12)},{ts_ass(0.95)},Flash,,0,0,0,,{{\\an5\\pos(540,700)\\fad(80,100)}}{b0.get('hook_flash_words', 'EXPLAIN THIS')}",
+        f"Dialogue: 2,{ts_ass(min(2.40, b0_end))},{ts_ass(total_dur)},Stamp,,0,0,0,,{{\\an7\\pos(48,88)\\fad(180,0)}}{{\\c&H003B3BFF&}}{sc.get('channel_signature','DEVIL ARCHIVE')}  {{\\c&H00FFFFFF&}}|  {sc.get('case_label','FILE #001')}",
+        f"Dialogue: 2,{ts_ass(total_dur*0.50)},{ts_ass(total_dur*0.50+0.80)},Egg,,0,0,0,,{{\\an9\\pos(1032,165)\\fad(100,100)}}[ANOMALY: {sc.get('easter_egg_code','X-014')}]",
     ]
-    fc_parts = [
-        "[0:a]apad=pad_dur=0.35,highpass=f=75,equalizer=f=180:width_type=h:width=120:g=3.5,"
-        "equalizer=f=3200:width_type=h:width=800:g=2.5,acompressor=threshold=-16dB:ratio=3,volume=1.38[vox]",
-        f"[1:a]lowpass=f=220,volume='if(between(t,{drop0:.2f},{climax_start:.2f}),0,0.22)':eval=frame,"
-        f"afade=t=in:st=0:d=0.5,afade=t=out:st={total_dur-0.7:.2f}:d=0.7[bgm]",
-        "[2:a]volume=0.58[b0]",
-        f"[3:a]volume=0.60,adelay={climax_ms}|{climax_ms}[b4]",
-    ]
-    mix_labels = ["[vox]", "[bgm]", "[b0]", "[b4]"]
+    srt, idx_s = [], 1
+    for st, en, txt in cues:
+        words = txt.split()
+        chunks = [" ".join(words[j:j+3]) for j in range(0, len(words), 3)] or [txt]
+        dt = (en - st) / len(chunks)
+        for j, ch in enumerate(chunks):
+            cs, ce = st + j * dt, st + (j + 1) * dt
+            ass.append(f"Dialogue: 1,{ts_ass(cs)},{ts_ass(ce)},Cap,,0,0,0,,{color_pop(ch)}")
+            srt.append(f"{idx_s}\n{ts_srt(cs)} --> {ts_srt(ce)}\n{ch}\n"); idx_s += 1
 
-    for w_i in range(1, len(beat_times)):
-        if w_i == climax_idx:
-            continue
-        in_idx = 4 + (len(mix_labels) - 4)
-        ms = int(max(0.1, beat_times[w_i]["start"] - 0.12) * 1000)
-        cmd.extend(["-f", "lavfi", "-t", "0.35", "-i", "anoisesrc=color=pink:sample_rate=44100"])
-        lbl = f"[w{w_i}]"
-        fc_parts.append(f"[{in_idx}:a]bandpass=f=850:width_type=h:width=500,afade=t=in:d=0.14,afade=t=out:st=0.14:d=0.20,volume=0.24,adelay={ms}|{ms}{lbl}")
-        mix_labels.append(lbl)
-
-    fc_parts.append(f"{''.join(mix_labels)}amix=inputs={len(mix_labels)}:duration=first:dropout_transition=0,alimiter=limit=0.95[out]")
-    cmd.extend(["-filter_complex", ";".join(fc_parts), "-map", "[out]", "-ar", "44100", "-ac", "2", "final_audio.wav"])
-    subprocess.run(cmd, check=True)
-
-    build_captions(beats, beat_times)
-    data["beat_times"] = beat_times
-    data["total_duration"] = round(total_dur, 3)
-    with open(SCRIPT_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
-
-    for tmp in beat_files + ["gap.wav", "drop_gap.wav", "vconcat.txt", "voice_full.wav"]:
-        if os.path.exists(tmp):
-            os.remove(tmp)
-    print(f"[+] Master Audio & Color-Pop ASS Ready: {total_dur:.2f}s | {len(beat_times)} beats!", flush=True)
-
+    open("subtitles.ass", "w", encoding="utf-8").write("\n".join(ass))
+    open("subtitles.srt", "w", encoding="utf-8").write("\n".join(srt))
+    open("subtitles_en.srt", "w", encoding="utf-8").write("\n".join(srt))
+    sc["beat_times"], sc["climax_time"], sc["total_duration"] = beat_times, round(climax_time, 3), round(total_dur, 3)
+    json.dump(sc, open(SCRIPT_FILE, "w", encoding="utf-8"), indent=2)
+    print(f"[+] Audio Ready: {total_dur:.2f}s | Stamp@2.40s | Climax@{climax_time:.2f}s", flush=True)
 
 if __name__ == "__main__":
     main()
