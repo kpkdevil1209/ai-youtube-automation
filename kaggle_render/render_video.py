@@ -33,14 +33,20 @@ def encode_all_prompts(prompts):
     pipe = WanPipeline.from_pretrained(MID, text_encoder=te, vae=vae, torch_dtype=torch.float16)
     embeds = []
     try:
+        try:
+            pipe.text_encoder.to("cuda:0")
+            dev = "cuda:0"
+        except Exception:
+            pipe.text_encoder.to("cpu")
+            dev = "cpu"
         with torch.inference_mode():
             for p in prompts:
-                pe, npe = pipe.encode_prompt(prompt=p + QUAL, negative_prompt=NEG, do_classifier_free_guidance=True, device="cpu")
+                pe, npe = pipe.encode_prompt(prompt=p + QUAL, negative_prompt=NEG, do_classifier_free_guidance=True, device=dev)
                 if not torch.isfinite(pe).all() or not torch.isfinite(npe).all():
                     raise RuntimeError("Non-finite prompt embeddings")
                 embeds.append((pe.cpu().float(), npe.cpu().float()))
         torch.save(embeds, "/tmp/embeds.pt")
-        print("[+] All 5 prompts safely encoded in bf16/fp32!", flush=True)
+        print(f"[+] All 5 prompts encoded on {dev}!", flush=True)
     finally:
         del pipe, te, vae; gc.collect(); torch.cuda.empty_cache()
 
@@ -58,26 +64,25 @@ def render_indices(indices, prompts, base_seed):
     except Exception: pipe.enable_model_cpu_offload()
 
     for i in indices:
-        steps = 22 if i == 0 else 20
-        print(f"[*] GPU Rendering Beat {i} (480x832, 33f, {steps} steps)...", flush=True)
+        steps = 18 if i == 0 else 15
+        print(f"[*] GPU Rendering Beat {i} (480x832, 25f, {steps} steps)...", flush=True)
         g = torch.Generator(device="cpu").manual_seed(base_seed + i * 7)
         pe, npe = embeds[i][0].to("cuda", dtype=dtype_tr), embeds[i][1].to("cuda", dtype=dtype_tr)
         try:
             with torch.inference_mode():
-                fr = pipe(prompt_embeds=pe, negative_prompt_embeds=npe, height=832, width=480, num_frames=33, num_inference_steps=steps, guidance_scale=5.0, generator=g).frames[0]
+                fr = pipe(prompt_embeds=pe, negative_prompt_embeds=npe, height=832, width=480, num_frames=25, num_inference_steps=steps, guidance_scale=5.0, generator=g).frames[0]
         except torch.cuda.OutOfMemoryError:
             torch.cuda.empty_cache(); gc.collect(); pipe.enable_sequential_cpu_offload()
             with torch.inference_mode():
-                fr = pipe(prompt_embeds=pe, negative_prompt_embeds=npe, height=832, width=480, num_frames=33, num_inference_steps=steps, guidance_scale=5.0, generator=g).frames[0]
+                fr = pipe(prompt_embeds=pe, negative_prompt_embeds=npe, height=832, width=480, num_frames=25, num_inference_steps=steps, guidance_scale=5.0, generator=g).frames[0]
         if is_black(fr):
-            print(f"[!] Black output on Beat {i} in fp16 -> switching transformer to fp32...", flush=True)
+            print(f"[!] Black output Beat {i} -> switching to fp32...", flush=True)
             dtype_tr = torch.float32
-            pipe.transformer.to(dtype=torch.float32)
-            pipe.enable_model_cpu_offload()
+            pipe.transformer.to(dtype=torch.float32); pipe.enable_model_cpu_offload()
             torch.cuda.empty_cache(); gc.collect()
             pe, npe = embeds[i][0].to("cuda", dtype=torch.float32), embeds[i][1].to("cuda", dtype=torch.float32)
             with torch.inference_mode():
-                fr = pipe(prompt_embeds=pe, negative_prompt_embeds=npe, height=832, width=480, num_frames=33, num_inference_steps=steps, guidance_scale=5.0, generator=torch.Generator(device="cpu").manual_seed(base_seed + i * 7)).frames[0]
+                fr = pipe(prompt_embeds=pe, negative_prompt_embeds=npe, height=832, width=480, num_frames=25, num_inference_steps=steps, guidance_scale=5.0, generator=torch.Generator(device="cpu").manual_seed(base_seed + i * 7)).frames[0]
             if is_black(fr): raise RuntimeError(f"Beat {i} rendered black even in fp32")
         print(f"[+] Beat {i} raw luma={float(np.asarray(fr[0], dtype=np.float32).mean()):.3f}", flush=True)
         export_to_video(fr, f"/tmp/raw_{i}.mp4", fps=16)
@@ -85,10 +90,10 @@ def render_indices(indices, prompts, base_seed):
     del pipe, vae; gc.collect(); torch.cuda.empty_cache()
 
 def prep_beat(raw_mp4, out_mp4, dur, idx):
-    loop_f = f"[0:v]split[a][b];[b]reverse[r];[a][r]concat=n=2:v=1:a=0,loop=loop=2:size=80:start=0,trim=duration={dur:.3f},setpts=PTS-STARTPTS"
+    loop_f = f"[0:v]split[a][b];[b]reverse[r];[a][r]concat=n=2:v=1:a=0,loop=loop=3:size=60:start=0,trim=duration={dur:.3f},setpts=PTS-STARTPTS"
     if idx == 0:
         mv = "scale=1280:2275:flags=lanczos,crop=1080:1920:x='(iw-1080)/2+16*sin(t*24)+20*sin(t*1.6)':y='(ih-1920)/2+14*cos(t*20)'"
-        gr = "eq=contrast=1.14:saturation=1.20:brightness=0.02,unsharp=5:5:0.8:5:5:0.0,noise=alls=3:allf=t+u"
+        gr = "eq=brightness='if(lt(t,0.12),0.14*(1-t/0.12),if(between(t,1.00,1.10),0.18,0.02))':contrast=1.15:saturation=1.22:eval=frame,unsharp=5:5:0.8:5:5:0.0,noise=alls=3:allf=t+u"
     elif idx == 3:
         mv = "scale=1220:2168:flags=lanczos,crop=1080:1920:x='(iw-1080)/2+28*sin(t*1.4)':y='(ih-1920)/2+16*cos(t*1.1)'"
         gr = "eq=brightness='if(lt(t,0.18),0.22*(1-t/0.18),0.02)':contrast=1.14:saturation=1.20:eval=frame,unsharp=5:5:0.75:5:5:0.0,noise=alls=3:allf=t+u"
@@ -100,8 +105,7 @@ def prep_beat(raw_mp4, out_mp4, dur, idx):
 
 def main():
     if len(sys.argv) >= 3 and sys.argv[1] == "--worker":
-        idxs = [int(x) for x in sys.argv[2].split(",")]
-        render_indices(idxs, json.load(open("/tmp/prompts.json", encoding="utf-8")), int(sys.argv[3]))
+        render_indices([int(x) for x in sys.argv[2].split(",")], json.load(open("/tmp/prompts.json", encoding="utf-8")), int(sys.argv[3]))
         return
 
     t0 = time.time()
