@@ -80,10 +80,13 @@ jobs:
             python -u empire_safety_shield.py
           fi
 
-      - name: Step 1 - Psych Strategy & Viral Topic Scout
-        run: python -u viral_trend_agent.py
+      - name: Step 1 - Live Viral Trend & Pillar Scout
+        run: |
+          pgrep -x ollama >/dev/null || (nohup ollama serve >/tmp/ollama.log 2>&1 & sleep 4)
+          rm -f trending_topic.json
+          python -u viral_trend_agent.py
 
-      - name: Step 2 - AI 12-Shot Documentary Scriptwriter
+      - name: Step 2 - AI 5-Beat Documentary Scriptwriter
         run: |
           pgrep -x ollama >/dev/null || (nohup ollama serve >/tmp/ollama.log 2>&1 & sleep 4)
           rm -f current_script.json final_audio.wav subtitles* final_output.mp4
@@ -116,7 +119,7 @@ jobs:
           fi
           chmod 600 ~/.kaggle/kaggle.json
 
-      - name: Step 6 - Kaggle T4 GPU Full AI Video & Cinema Render
+      - name: Step 6 - Kaggle GPU Full AI Video & Cinema Render
         run: |
           rm -rf kaggle_assets && mkdir -p kaggle_assets
           cp -f final_audio.wav current_script.json kaggle_assets/
@@ -145,7 +148,7 @@ jobs:
             if echo "$STATUS_OUT" | grep -qi "complete"; then
               break
             fi
-            if echo "$STATUS_OUT" | grep -qi "error"; then
+            if echo "$STATUS_OUT" | grep -qiE "error|cancel"; then
               kaggle kernels output "$KERNEL_ID" -p . || true
               cat *.log 2>/dev/null || true
               exit 1
