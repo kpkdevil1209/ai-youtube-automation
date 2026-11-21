@@ -24,10 +24,9 @@ SCRIPT_SCHEMA = {
                 "type": "object",
                 "properties": {
                     "narration": {"type": "string"},
-                    "shot_a": {"type": "string"},
-                    "shot_b": {"type": "string"},
+                    "ai_prompt": {"type": "string"},
                 },
-                "required": ["narration", "shot_a", "shot_b"],
+                "required": ["narration", "ai_prompt"],
             },
         },
     },
@@ -44,7 +43,7 @@ def load_topic():
         "topic": "What Happens To Your Body 3000 Meters Under The Ocean",
         "angle": "crush pressure and pitch darkness",
         "badge": "DEPTH: 3,000M",
-        "psych_strategy": "IMMEDIATE_SURVIVAL_THREAT: Open with an exact countdown or biological failure.",
+        "psych_strategy": "IMMEDIATE_SURVIVAL_THREAT",
     }
 
 
@@ -52,16 +51,14 @@ def write_documentary_script(meta):
     prompt = (
         f"You are an elite viral YouTube Shorts documentary writer. Topic: '{meta['topic']}'. "
         f"Angle: '{meta['angle']}'. Hook Style: '{meta.get('psych_strategy', 'SURVIVAL')}'. "
-        "Write an intense 33-second 6-beat English script designed for 100% viewer retention. Rules: "
-        "1) Beat 0 MUST drop mid-danger in the first 5 words with zero greetings. "
-        "2) Beats 1-3 escalate dread with specific numbers, sounds, or physical horrors. "
-        "3) Beat 4 delivers the chilling twist reveal. "
-        "4) Beat 5 ends mid-clause so it loops straight back into Beat 0. "
-        "5) Keep EACH beat narration 10 to 15 punchy words. "
-        "6) For EACH beat provide TWO visually different cinematic prompts: shot_a and shot_b "
-        "(dark moody photorealistic 35mm documentary scene, dramatic shadows, NO text, NO watermarks, avoid human hand/face close-ups). "
-        "7) Title must be under 62 chars, pure curiosity gap, NO emojis, NO generic words like unveiled or shocking truth. "
-        "8) pinned_comment must spark debate in 1 sentence."
+        "Write an ultra-gripping 25-second 5-beat script in SIMPLE, EASY-TO-UNDERSTAND English (no rare academic words). Rules: "
+        "1) Beat 0 Hook MUST shock in the first 4 words (e.g., 'Stop scrolling. If you...', 'Never dive past...', 'At 3 seconds left...'). "
+        "2) Beats 1-2 build fast terrifying tension with real numbers or physical danger. "
+        "3) Beat 3 is the shocking climax reveal. "
+        "4) Beat 4 ends mid-sentence so it loops straight back into Beat 0. "
+        "5) Keep EACH beat narration 9 to 13 clear punchy words. "
+        "6) For EACH beat write ai_prompt for text-to-video AI: specify clear CAMERA MOTION (slow dolly forward, aerial sweep, underwater drift) + moving subject (waves crashing, giant shadowy sea monster, swirling black hole, blizzard storm). Dark photorealistic 35mm cinema, NO text, NO close-up hands/faces. "
+        "7) Title under 60 chars, huge curiosity gap, NO emojis."
     )
     payload = {
         "model": TEXT_MODEL,
@@ -69,7 +66,7 @@ def write_documentary_script(meta):
         "stream": False,
         "format": SCRIPT_SCHEMA,
         "keep_alive": "0",
-        "options": {"num_ctx": 4096, "num_predict": 1100, "temperature": 0.65},
+        "options": {"num_ctx": 4096, "num_predict": 850, "temperature": 0.65},
     }
     for attempt in range(1, 4):
         try:
@@ -79,11 +76,11 @@ def write_documentary_script(meta):
             data = json.loads(r.json()["message"]["content"])
             beats = data.get("beats") or []
             if len(beats) >= 5:
-                data["beats"] = beats[:6]
+                data["beats"] = beats[:5]
                 return data
         except Exception as e:
             print(f"[!] Script retry {attempt}: {e}", flush=True)
-    raise RuntimeError("Failed to generate 6-beat script")
+    raise RuntimeError("Failed to generate 5-beat script")
 
 
 def main():
@@ -104,7 +101,7 @@ def main():
     }
     with open(SCRIPT_FILE, "w", encoding="utf-8") as f:
         json.dump(out, f, indent=2)
-    print(f"[+] 12-Shot Script Ready [{out['run_id']}]: {out['title']}", flush=True)
+    print(f"[+] 5-Beat Video Script Ready [{out['run_id']}]: {out['title']}", flush=True)
 
 
 if __name__ == "__main__":
