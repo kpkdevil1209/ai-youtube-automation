@@ -1,15 +1,15 @@
 {
-  "theme": "MYSTERY",
-  "topic": "Why No One Is Allowed to Visit This Lost Island: A Forbidden Place Story",
-  "badge": "FILE #013 | RESTRICTED ZONE",
-  "case_number": 13,
-  "case_label": "FILE #013",
-  "easter_egg_code": "V-134",
+  "theme": "EARTH",
+  "topic": "Alaska's 481 Meter Megatsunami: The Second-Highest Recorded Event",
+  "badge": "FILE #014 | EXTREME FORCE",
+  "case_number": 14,
+  "case_label": "FILE #014",
+  "easter_egg_code": "K-146",
   "requested_by": "",
-  "angle": "TINY_FLAW_MEGA_DISASTER: How one small flaw caused total collapse.",
-  "psych_strategy": "TINY_FLAW_MEGA_DISASTER: How one small flaw caused total collapse.",
-  "fact_summary": "After \"Ser III No. 5,\" painted in 1920, sold for nearly 16 times its pre-sale estimate, critics charged that af Klint wanted to keep her \"holy body of work\" together in a temple, not spread across private collections",
-  "pillar": "Forbidden Places",
-  "pillar_id": "forbidden_places",
-  "source_type": "science_rss"
+  "angle": "THE_SEALED_MYSTERY: Why experts locked it down and left.",
+  "psych_strategy": "THE_SEALED_MYSTERY: Why experts locked it down and left.",
+  "fact_summary": "Tracy Arm is a fjord in the U.S. state of Alaska near Juneau. It is named after Secretary of the Navy Benjamin F. Tracy (1889–93). It is located about 45 miles (72 km) south of Juneau and 70 miles (110 km) north of Petersburg, Alaska, off of Holkham Bay and adjacent to Stephens Passage within the Tongass National Fores",
+  "pillar": "Earth Fury",
+  "pillar_id": "extreme_weather",
+  "source_type": "google_news"
 }
