@@ -149,7 +149,7 @@ jobs:
 
           echo "[*] Polling Kaggle T4 x2 Kernel: $KERNEL_ID"
           Q_COUNT=0
-          for i in $(seq 1 200); do
+          for i in $(seq 1 260); do
             STATUS_OUT=$(kaggle kernels status "$KERNEL_ID" 2>&1 || true)
             echo "[$i/200] $STATUS_OUT"
             if echo "$STATUS_OUT" | grep -qi "complete"; then break; fi
