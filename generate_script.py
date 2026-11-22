@@ -14,20 +14,25 @@ SCHEMA = {
     "required": ["title", "description", "hook_flash_words", "hook_question", "escalation_line", "hook_ai_prompt", "tags", "continuation_beats"],
 }
 
-def has_repetition(d):
-    lines = [d.get("hook_question", ""), d.get("escalation_line", "")] + [b.get("narration", "") for b in d.get("continuation_beats", [])]
+def rep_reason(d):
+    lines = [d.get("escalation_line", "")] + [b.get("narration", "") for b in d.get("continuation_beats", [])[:4]]
     toks = [{w for w in re.findall(r"[a-z]+", s.lower()) if len(w) > 3} for s in lines]
     for i in range(len(toks)):
         for j in range(i + 1, len(toks)):
-            if toks[i] and toks[j] and (len(toks[i] & toks[j]) / max(1, min(len(toks[i]), len(toks[j])))) >= 0.50:
-                return True
-    return False
+            inter = toks[i] & toks[j]
+            if len(inter) >= 3 and (len(inter) / max(1, min(len(toks[i]), len(toks[j])))) >= 0.60:
+                return f"rep({','.join(sorted(inter)[:3])})"
+    return ""
 
-def valid_beats(d):
+def valid_reason(d):
     cb = d.get("continuation_beats", [])
-    if len(cb) < 4 or len(d.get("hook_question", "").split()) < 3 or len(d.get("escalation_line", "").split()) < 4:
-        return False
-    return all(len(re.findall(r"[A-Za-z0-9]+", b.get("narration", ""))) >= 4 and len(b.get("ai_prompt", "").split()) >= 5 for b in cb[:4])
+    if len(cb) < 4: return "cb<4"
+    if len(re.findall(r"[A-Za-z0-9]+", d.get("hook_question", ""))) < 2: return "hook<2"
+    if len(re.findall(r"[A-Za-z0-9]+", d.get("escalation_line", ""))) < 3: return "esc<3"
+    for idx, b in enumerate(cb[:4], 1):
+        if len(re.findall(r"[A-Za-z0-9]+", b.get("narration", ""))) < 3: return f"empty_narr_b{idx}"
+        if len(b.get("ai_prompt", "").split()) < 3: return f"short_ai_b{idx}"
+    return ""
 
 def main():
     if not os.path.exists("trending_topic.json"): raise RuntimeError("trending_topic.json missing!")
@@ -46,17 +51,21 @@ def main():
         "6) title: Under 54 chars, huge curiosity gap, NO emojis.",
     ])
     payload = {"model": MODEL, "messages": [{"role": "user", "content": prompt}], "stream": False, "format": SCHEMA, "keep_alive": "0", "options": {"num_ctx": 4096, "num_predict": 900, "temperature": 0.72, "repeat_penalty": 1.28, "repeat_last_n": 128, "top_p": 0.9}}
-    s = None
-    for a in range(1, 6):
+    s, best = None, None
+    for a in range(1, 5):
         try:
             r = requests.post(OLLAMA_URL, json=payload, timeout=180)
             r.raise_for_status()
             d = json.loads(r.json()["message"]["content"])
-            if valid_beats(d) and not has_repetition(d):
-                s = d; break
-            print(f"[!] Retry {a}: empty, short, or repetitive beat rejected", flush=True)
+            err = valid_reason(d)
+            if not err:
+                best = d
+                err = rep_reason(d)
+                if not err: s = d; break
+            print(f"[!] Retry {a}: {err}", flush=True)
         except Exception as e:
             print(f"[!] Retry {a}: {e}", flush=True)
+    s = s or best
     if not s: raise RuntimeError("Script generation failed")
 
     cnum, clbl = int(m.get("case_number", 1)), m.get("case_label", "FILE #001")
