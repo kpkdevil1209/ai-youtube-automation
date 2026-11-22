@@ -1,5 +1,5 @@
 {
-  "id": "kpkdevil1209/silent-signal-render-v2",
+  "id": "kpkdevil/silent-signal-render-v2",
   "title": "silent-signal-render-v2",
   "code_file": "render_video.py",
   "language": "python",
@@ -10,7 +10,7 @@
   "enable_internet": true,
   "machine_shape": "NvidiaTeslaT4",
   "dataset_sources": [
-    "kpkdevil1209/devil-insanity-assets"
+    "kpkdevil/devil-insanity-assets"
   ],
   "competition_sources": [],
   "kernel_sources": [],
