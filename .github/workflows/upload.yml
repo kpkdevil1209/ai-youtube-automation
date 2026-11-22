@@ -2,7 +2,7 @@ name: SILENT SIGNAL - Full Kaggle T4 AI Shorts Engine
 
 on:
   schedule:
-    - cron: '0 2,6,10 * * *' # Off-Peak Fast Kaggle GPU -> Auto-Scheduled US/UK Prime-Time
+    - cron: '17 21,0,4 * * *' # Quietest Global Kaggle GPU Windows -> US/UK Prime Schedule
   workflow_dispatch:
 
 permissions:
@@ -29,7 +29,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.ollama
-          key: ${{ runner.os }}-ollama-qwen2.5-3b-llama-v2
+          key: ${{ runner.os }}-ollama-qwen2.5-3b-v3
           restore-keys: |
             ${{ runner.os }}-ollama-
 
@@ -53,32 +53,23 @@ jobs:
           fi
           nohup ollama serve >/tmp/ollama.log 2>&1 &
           for i in $(seq 1 15); do
-            if curl -fsS http://127.0.0.1:11434/api/tags >/dev/null 2>&1; then
-              break
-            fi
+            curl -fsS http://127.0.0.1:11434/api/tags >/dev/null 2>&1 && break
             sleep 1
           done
-          for m in qwen2.5:3b llama3.2:1b; do
-            if ! ollama list | grep -q "$m"; then
-              ok=0
-              for r in 1 2 3; do
-                if ollama pull "$m"; then
-                  ok=1
-                  break
-                fi
-                sleep 8
-              done
-              [ "$ok" -eq 1 ] || exit 1
-            fi
-          done
+          if ! ollama list | grep -q "qwen2.5:3b"; then
+            ok=0
+            for r in 1 2 3; do
+              if ollama pull "qwen2.5:3b"; then ok=1; break; fi
+              sleep 8
+            done
+            [ "$ok" -eq 1 ] || exit 1
+          fi
 
       - name: Step 0 - Empire Safety Shield Check
         env:
           YOUTUBE_TOKEN_PICKLE: ${{ secrets.YOUTUBE_TOKEN_PICKLE }}
         run: |
-          if [ -f empire_safety_shield.py ]; then
-            python -u empire_safety_shield.py
-          fi
+          if [ -f empire_safety_shield.py ]; then python -u empire_safety_shield.py; fi
 
       - name: Step 1 - Live Viral Trend & Pillar Scout
         run: |
@@ -89,21 +80,14 @@ jobs:
       - name: Step 2 - AI 5-Beat Documentary Scriptwriter
         run: |
           pgrep -x ollama >/dev/null || (nohup ollama serve >/tmp/ollama.log 2>&1 & sleep 4)
-          rm -f current_script.json final_audio.wav subtitles* final_output.mp4
+          rm -f current_script.json final_audio.wav subtitles* final_output.mp4 final_video.mp4
           python -u generate_script.py
 
-      - name: Step 3 - Kokoro-82M Voice, Dead-Air SFX & Color-Pop ASS Captions
+      - name: Step 3 - Kokoro Human Blend Voice, Drone & ASS Captions
         run: python -u generate_audio.py
 
-      - name: Step 4 - Clean Stale Repo Assets & Save History
-        run: |
-          rm -f kaggle_render/raw_gameplay.mp4 kaggle_render/final_audio.wav kaggle_render/current_script.json kaggle_render/subtitles*
-          git config --global user.name "DEVIL Pipeline Bot"
-          git config --global user.email "bot@devil-insanity.local"
-          git add -A posted_history.json trending_topic.json kaggle_render/
-          git commit -m "Clean stale assets & save history [skip ci]" || echo "Nothing new to commit"
-          git pull --rebase origin main || true
-          git push origin main || true
+      - name: Step 4 - Clean Stale Repo Assets
+        run: rm -f kaggle_render/raw_gameplay.mp4 kaggle_render/final_audio.wav kaggle_render/current_script.json kaggle_render/subtitles*
 
       - name: Step 5 - Setup Kaggle Credentials
         env:
@@ -112,11 +96,8 @@ jobs:
           KAGGLE_JSON: ${{ secrets.KAGGLE_JSON }}
         run: |
           mkdir -p ~/.kaggle
-          if [ -n "$KAGGLE_JSON" ]; then
-            echo "$KAGGLE_JSON" > ~/.kaggle/kaggle.json
-          else
-            echo "{\"username\":\"$KAGGLE_USERNAME\",\"key\":\"$KAGGLE_KEY\"}" > ~/.kaggle/kaggle.json
-          fi
+          if [ -n "$KAGGLE_JSON" ]; then echo "$KAGGLE_JSON" > ~/.kaggle/kaggle.json
+          else echo "{\"username\":\"$KAGGLE_USERNAME\",\"key\":\"$KAGGLE_KEY\"}" > ~/.kaggle/kaggle.json; fi
           chmod 600 ~/.kaggle/kaggle.json
 
       - name: Step 6 - Kaggle T4 x2 GPU Full AI Video Render
@@ -124,29 +105,37 @@ jobs:
           rm -rf kaggle_assets && mkdir -p kaggle_assets
           cp -f final_audio.wav current_script.json kaggle_assets/
           cp -f subtitles.ass subtitles.srt subtitles_en.srt kaggle_assets/ 2>/dev/null || true
-          python3 -c 'import json, os; u=json.load(open(os.path.expanduser("~/.kaggle/kaggle.json")))["username"]; json.dump({"title":"devil-insanity-assets","id":f"{u}/devil-insanity-assets","licenses":[{"name":"CC0-1.0"}]}, open("kaggle_assets/dataset-metadata.json","w"), indent=2)'
+          KUSER=$(python3 -c 'import json, os; print(json.load(open(os.path.expanduser("~/.kaggle/kaggle.json")))["username"])')
+          python3 -c 'import json, sys; u=sys.argv[1]; json.dump({"title":"devil-insanity-assets","id":f"{u}/devil-insanity-assets","licenses":[{"name":"CC0-1.0"}]}, open("kaggle_assets/dataset-metadata.json","w"), indent=2)' "$KUSER"
           kaggle datasets version -p kaggle_assets -m "Run ${{ github.run_number }}-${{ github.run_attempt }}" --dir-mode zip || kaggle datasets create -p kaggle_assets --dir-mode zip
-          echo "[*] Waiting 50s for Kaggle dataset indexing..."
-          sleep 50
 
-          for k in $(kaggle kernels list --mine --page-size 5 --csv | tail -n +2 | cut -d',' -f1); do
-            echo -n "[*] Account kernel: $k -> "
-            kaggle kernels status "$k" || true
+          echo "[*] Waiting for Kaggle dataset status ready..."
+          for d in $(seq 1 12); do
+            DS=$(kaggle datasets status "$KUSER/devil-insanity-assets" 2>&1 || true)
+            echo "[Dataset $d/12] $DS"
+            echo "$DS" | grep -qi "ready" && break
+            sleep 10
           done
+          sleep 15
 
           python3 -c 'import json, os, re; u=json.load(open(os.path.expanduser("~/.kaggle/kaggle.json")))["username"]; p="kaggle_render/kernel-metadata.json"; m=json.load(open(p)); s=re.sub(r"[^a-z0-9-]+","-",m.get("id",f"{u}/silent-signal-render-v2").split("/")[-1].lower()).strip("-") or "silent-signal-render-v2"; s="silent-signal-render-v2" if s=="devil-video-render-engine" else s; m["id"]=f"{u}/{s}"; m["title"]=s; m["enable_gpu"]=True; m["enable_internet"]=True; m["dataset_sources"]=[f"{u}/devil-insanity-assets"]; json.dump(m,open(p,"w"),indent=2); print("Synced:",m["id"])'
           KERNEL_ID=$(python3 -c 'import json; print(json.load(open("kaggle_render/kernel-metadata.json"))["id"])')
-          CUR_ST=$(kaggle kernels status "$KERNEL_ID" 2>&1 || true)
-          echo "[*] Current status: $CUR_ST"
+
+          for w in $(seq 1 16); do
+            CUR_ST=$(kaggle kernels status "$KERNEL_ID" 2>&1 || true)
+            echo "[Pre-Check $w/16] $CUR_ST"
+            echo "$CUR_ST" | grep -qi "cancel_acknowledged" || break
+            sleep 15
+          done
+
           if echo "$CUR_ST" | grep -qiE "queued|running"; then
-            echo "[*] Already active on Kaggle - polling existing run to avoid queue pile-up!"
+            echo "[*] Already active on Kaggle - attaching to existing run!"
           else
             set +e
             PUSH_OUT=$(kaggle kernels push -p kaggle_render --accelerator NvidiaTeslaT4 2>&1)
             PUSH_RC=$?
             if [ $PUSH_RC -ne 0 ] && echo "$PUSH_OUT" | grep -qiE "unrecognized|invalid|accelerator"; then
-              PUSH_OUT=$(kaggle kernels push -p kaggle_render 2>&1)
-              PUSH_RC=$?
+              PUSH_OUT=$(kaggle kernels push -p kaggle_render 2>&1); PUSH_RC=$?
             fi
             set -e
             echo "$PUSH_OUT"
@@ -163,10 +152,8 @@ jobs:
           for i in $(seq 1 200); do
             STATUS_OUT=$(kaggle kernels status "$KERNEL_ID" 2>&1 || true)
             echo "[$i/200] $STATUS_OUT"
-            if echo "$STATUS_OUT" | grep -qi "complete"; then
-              break
-            fi
-            if echo "$STATUS_OUT" | grep -qiE "error|cancel"; then
+            if echo "$STATUS_OUT" | grep -qi "complete"; then break; fi
+            if echo "$STATUS_OUT" | grep -qiE "error|cancelled"; then
               kaggle kernels output "$KERNEL_ID" -p . || true
               cat *.log 2>/dev/null || true
               exit 1
@@ -174,27 +161,36 @@ jobs:
             if echo "$STATUS_OUT" | grep -qi "queued"; then
               Q_COUNT=$((Q_COUNT + 1))
               if [ "$Q_COUNT" -ge 150 ]; then
-                echo "[!] Still QUEUED after 37.5 min."
-                exit 1
+                echo "[!] Still QUEUED after 37.5 min."; exit 1
               fi
             fi
             sleep 15
           done
           kaggle kernels output "$KERNEL_ID" -p .
+          [ -f final_output.mp4 ] || mv -f final_video.mp4 final_output.mp4
           ls -lh final_output.mp4
 
       - name: Step 7 - Technical QA & YouTube Global Upload
         env:
           YOUTUBE_TOKEN_PICKLE: ${{ secrets.YOUTUBE_TOKEN_PICKLE }}
         run: |
-          if [ -f qa_guard_agent.py ]; then
-            python -u qa_guard_agent.py final_output.mp4
-          fi
+          if [ -f qa_guard_agent.py ]; then python -u qa_guard_agent.py final_output.mp4; fi
           python -u upload_video.py
 
-      - name: Step 8 - Comment Auto-Reply Bot
+      - name: Step 8 - Comment Auto-Reply & Topic-Mining Bot
         env:
           YOUTUBE_TOKEN_PICKLE: ${{ secrets.YOUTUBE_TOKEN_PICKLE }}
         run: |
           pgrep -x ollama >/dev/null || (nohup ollama serve >/tmp/ollama.log 2>&1 & sleep 4)
           python -u comment_reply_bot.py || true
+
+      - name: Step 9 - Save Pipeline State & Viewer Requests
+        run: |
+          git config --global user.name "Silent Signal Bot"
+          git config --global user.email "bot@silentsignal.local"
+          for f in posted_history.json trending_topic.json requested_topics.json uploaded_videos.json replied_comments.json safety_state.json kaggle_render/kernel-metadata.json; do
+            [ -f "$f" ] && git add "$f"
+          done
+          git commit -m "Save Silent Signal state [skip ci]" || echo "No state changes"
+          git pull --rebase origin main || true
+          git push origin main || true
