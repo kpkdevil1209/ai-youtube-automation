@@ -26,6 +26,25 @@ def load_beats():
     if not prompts: prompts, durs = [f"{d.get('topic', 'deep ocean trench')}, {QUAL}"] * 5, [1.0, 4.5, 5.0, 5.5, 4.5]
     return prompts[:6], durs[:6]
 
+def install_chunked_sdpa(chunk_size=512):
+    import torch
+    import torch.nn.functional as F
+    orig_sdpa = F.scaled_dot_product_attention
+    if getattr(orig_sdpa, "_is_chunked", False):
+        return
+    def chunked_sdpa(query, key, value, attn_mask=None, dropout_p=0.0, is_causal=False, scale=None, enable_gqa=False):
+        kw = {"enable_gqa": enable_gqa} if enable_gqa else {}
+        if query.is_cuda and query.ndim == 4 and query.dtype != torch.float16 and attn_mask is None and not is_causal and query.shape[-2] > chunk_size:
+            out = [
+                orig_sdpa(query[:, :, i:i + chunk_size, :], key, value, attn_mask=None, dropout_p=dropout_p, is_causal=False, scale=scale, **kw)
+                for i in range(0, query.shape[-2], chunk_size)
+            ]
+            return torch.cat(out, dim=-2)
+        return orig_sdpa(query, key, value, attn_mask=attn_mask, dropout_p=dropout_p, is_causal=is_causal, scale=scale, **kw)
+    chunked_sdpa._is_chunked = True
+    F.scaled_dot_product_attention = chunked_sdpa
+    torch.nn.functional.scaled_dot_product_attention = chunked_sdpa
+
 def encode_sub(local_dir):
     import torch
     from diffusers import WanPipeline
@@ -50,6 +69,7 @@ def make_pipe(local_dir, dtype):
     from diffusers import AutoencoderKLWan, WanPipeline
     from diffusers.schedulers.scheduling_unipc_multistep import UniPCMultistepScheduler
     import torch
+    install_chunked_sdpa(512)
     vae = AutoencoderKLWan.from_pretrained(local_dir, subfolder="vae", torch_dtype=torch.float32)
     for fn in ("enable_tiling", "enable_slicing"):
         try: getattr(vae, fn)()
@@ -57,8 +77,6 @@ def make_pipe(local_dir, dtype):
     pipe = WanPipeline.from_pretrained(local_dir, vae=vae, text_encoder=None, tokenizer=None, torch_dtype=dtype)
     pipe.scheduler = UniPCMultistepScheduler.from_config(pipe.scheduler.config, flow_shift=3.0)
     pipe.set_progress_bar_config(disable=True)
-    try: pipe.enable_attention_slicing()
-    except Exception: pass
     pipe.enable_model_cpu_offload()
     return pipe
 
@@ -67,23 +85,17 @@ def run_worker(gpu_id, idxs_str, local_dir):
     from diffusers.utils import export_to_video
     idxs = [int(x) for x in idxs_str.split(",") if x.strip()]
     embeds = torch.load("embeds.pt", map_location="cpu", weights_only=True)
-    cur_dtype = torch.float16
-    pipe = make_pipe(local_dir, cur_dtype)
+    dtype = torch.bfloat16
+    pipe = make_pipe(local_dir, dtype)
     neg_e = embeds["neg"]
     for i in idxs:
-        steps = 18 if i in (0, 3) else 15
-        pe, ne = embeds["pos"][i].to("cuda", dtype=cur_dtype), neg_e.to("cuda", dtype=cur_dtype)
-        frames = pipe(prompt_embeds=pe, negative_prompt_embeds=ne, height=832, width=480, num_frames=25, num_inference_steps=steps, guidance_scale=5.0, generator=torch.Generator("cuda").manual_seed(1042 + i)).frames[0]
+        steps = 16 if i in (0, 3) else 14
+        pe, ne = embeds["pos"][i].to("cuda", dtype=dtype), neg_e.to("cuda", dtype=dtype)
+        frames = pipe(prompt_embeds=pe, negative_prompt_embeds=ne, height=832, width=480, num_frames=21, num_inference_steps=steps, guidance_scale=5.0, generator=torch.Generator("cuda").manual_seed(1042 + i)).frames[0]
         arr = np.array(frames)
-        if float(arr.mean()) < 1.5 and float(arr.std()) < 1.5 and cur_dtype != torch.bfloat16:
-            print(f"[!] GPU {gpu_id} clip {i} dark -> reloading bf16", flush=True)
-            del pipe, frames, pe, ne; gc.collect(); torch.cuda.empty_cache()
-            cur_dtype = torch.bfloat16
-            pipe = make_pipe(local_dir, cur_dtype)
-            pe, ne = embeds["pos"][i].to("cuda", dtype=cur_dtype), neg_e.to("cuda", dtype=cur_dtype)
-            frames = pipe(prompt_embeds=pe, negative_prompt_embeds=ne, height=832, width=480, num_frames=25, num_inference_steps=steps, guidance_scale=5.0, generator=torch.Generator("cuda").manual_seed(2042 + i)).frames[0]
+        print(f"[*] GPU {gpu_id} clip {i} stats: mean={arr.mean():.2f}, std={arr.std():.2f}", flush=True)
         export_to_video(frames, f"clip_{i}.mp4", fps=16)
-        del frames, pe, ne; gc.collect(); torch.cuda.empty_cache()
+        del frames, arr, pe, ne; gc.collect(); torch.cuda.empty_cache()
         print(f"[*] GPU {gpu_id} rendered clip_{i}.mp4 ({steps} steps)", flush=True)
 
 def assemble(durs):
