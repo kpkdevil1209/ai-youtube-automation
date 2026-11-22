@@ -1,4 +1,4 @@
-import os, sys, glob, json, shutil, subprocess, gc
+import os, sys, json, shutil, subprocess, gc
 import numpy as np
 
 MODEL = "Wan-AI/Wan2.1-T2V-1.3B-Diffusers"
@@ -6,10 +6,13 @@ QUAL = "raw National Geographic documentary footage, authentic real-world textur
 NEG = "sci-fi, futuristic, cyberpunk, glowing neon, glowing rim light, hologram, laser, CGI render, 3D animation, video game, cartoon, anime, text, watermark, subtitles, logo, blurry, low quality, overexposed, overall gray"
 
 def find_asset(name):
-    for d in [".", "/kaggle/input/devil-insanity-assets"] + sorted(glob.glob("/kaggle/input/*")):
+    for d in (".", "/kaggle/working"):
         p = os.path.join(d, name)
         if os.path.exists(p): return p
-    raise FileNotFoundError(f"Missing asset: {name}")
+    for dp, _, fns in os.walk("/kaggle/input"):
+        if name in fns: return os.path.join(dp, name)
+    found = [os.path.join(dp, f) for dp, _, fns in os.walk("/kaggle/input") for f in fns]
+    raise FileNotFoundError(f"Missing {name} | /kaggle/input={found[:10]}")
 
 def load_beats():
     with open(find_asset("current_script.json"), encoding="utf-8") as f: d = json.load(f)
