@@ -1,4 +1,5 @@
 import os, sys, json, time, shutil, subprocess, gc
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 import numpy as np
 
 MODEL = "Wan-AI/Wan2.1-T2V-1.3B-Diffusers"
@@ -19,66 +20,71 @@ def load_beats():
     raw = d.get("beats") or d.get("scenes") or []
     prompts, durs = [], []
     for b in raw:
-        vp = b.get("visual_prompt") or b.get("prompt") or b.get("visual") or d.get("topic", "dark ocean abyss documentary") if isinstance(b, dict) else str(b)
+        vp = b.get("visual_prompt") or b.get("ai_prompt") or b.get("prompt") or b.get("visual") or d.get("topic", "dark ocean abyss documentary") if isinstance(b, dict) else str(b)
         prompts.append(f"{vp.strip()}, {QUAL}")
         durs.append(float(b.get("duration", 4.4)) if isinstance(b, dict) else 4.4)
     if not prompts: prompts, durs = [f"{d.get('topic', 'deep ocean trench')}, {QUAL}"] * 5, [1.0, 4.5, 5.0, 5.5, 4.5]
     return prompts[:6], durs[:6]
 
-def run_worker(gpu_id, idxs_str, local_dir):
-    import torch
-    from diffusers import AutoencoderKLWan, WanPipeline
-    from diffusers.schedulers.scheduling_unipc_multistep import UniPCMultistepScheduler
-    from diffusers.utils import export_to_video
-
-    idxs = [int(x) for x in idxs_str.split(",") if x.strip()]
-    embeds = torch.load("embeds.pt", map_location="cpu", weights_only=True)
-    vae = AutoencoderKLWan.from_pretrained(local_dir, subfolder="vae", torch_dtype=torch.float32)
-    for fn in ("enable_tiling", "enable_slicing"):
-        try: getattr(vae, fn)()
-        except Exception: pass
-    pipe = WanPipeline.from_pretrained(local_dir, vae=vae, text_encoder=None, tokenizer=None, torch_dtype=torch.float16)
-    pipe.scheduler = UniPCMultistepScheduler.from_config(pipe.scheduler.config, flow_shift=3.0)
-    pipe.set_progress_bar_config(disable=True)
-    try: pipe.enable_attention_slicing()
-    except Exception: pass
-    pipe.to("cuda")
-
-    neg_e = embeds["neg"]
-    for i in idxs:
-        dt = pipe.transformer.dtype
-        pe, ne = embeds["pos"][i].to("cuda", dtype=dt), neg_e.to("cuda", dtype=dt)
-        steps = 18 if i in (0, 3) else 15
-        frames = pipe(prompt_embeds=pe, negative_prompt_embeds=ne, height=832, width=480, num_frames=25, num_inference_steps=steps, guidance_scale=5.0, generator=torch.Generator("cuda").manual_seed(1042 + i)).frames[0]
-        arr = np.array(frames)
-        if float(arr.mean()) < 1.5 and float(arr.std()) < 1.5:
-            print(f"[!] GPU {gpu_id} clip {i} dark -> switching bf16", flush=True)
-            del frames, pe, ne; pipe.to("cpu"); gc.collect(); torch.cuda.empty_cache()
-            pipe.transformer.to(torch.bfloat16); pipe.to("cuda")
-            pe, ne = embeds["pos"][i].to("cuda", dtype=torch.bfloat16), neg_e.to("cuda", dtype=torch.bfloat16)
-            frames = pipe(prompt_embeds=pe, negative_prompt_embeds=ne, height=832, width=480, num_frames=25, num_inference_steps=steps, guidance_scale=5.0, generator=torch.Generator("cuda").manual_seed(2042 + i)).frames[0]
-        export_to_video(frames, f"clip_{i}.mp4", fps=16)
-        del frames; gc.collect(); torch.cuda.empty_cache()
-        print(f"[*] GPU {gpu_id} rendered clip_{i}.mp4 ({steps} steps)", flush=True)
-
-def encode_all(prompts, local_dir):
+def encode_sub(local_dir):
     import torch
     from diffusers import WanPipeline
-    print("[*] Encoding prompts once in UMT5 bfloat16...", flush=True)
+    prompts, _ = load_beats()
+    print("[*] Encoding prompts sequentially in UMT5 bfloat16...", flush=True)
     enc = WanPipeline.from_pretrained(local_dir, transformer=None, vae=None, torch_dtype=torch.bfloat16)
-    enc.to("cuda")
+    try: enc.text_encoder.set_input_embeddings(enc.text_encoder.get_input_embeddings())
+    except Exception: pass
+    enc.enable_sequential_cpu_offload()
     pos_list, neg_e = [], None
     with torch.no_grad():
         for i, p in enumerate(prompts):
             pe, ne = enc.encode_prompt(prompt=p, negative_prompt=NEG, do_classifier_free_guidance=True, max_sequence_length=226, device="cuda")
             if not (torch.isfinite(pe).all() and torch.isfinite(ne).all()):
-                enc.to("cpu", dtype=torch.float32)
-                pe, ne = enc.encode_prompt(prompt=p, negative_prompt=NEG, do_classifier_free_guidance=True, max_sequence_length=226, device="cpu")
+                raise RuntimeError("Non-finite UMT5 embeddings")
             pos_list.append(pe.cpu().to(torch.bfloat16))
             if neg_e is None: neg_e = ne.cpu().to(torch.bfloat16)
             print(f"[*] Encoded prompt {i+1}/{len(prompts)}", flush=True)
     torch.save({"pos": pos_list, "neg": neg_e}, "embeds.pt")
-    del enc; gc.collect(); torch.cuda.empty_cache()
+
+def make_pipe(local_dir, dtype):
+    from diffusers import AutoencoderKLWan, WanPipeline
+    from diffusers.schedulers.scheduling_unipc_multistep import UniPCMultistepScheduler
+    import torch
+    vae = AutoencoderKLWan.from_pretrained(local_dir, subfolder="vae", torch_dtype=torch.float32)
+    for fn in ("enable_tiling", "enable_slicing"):
+        try: getattr(vae, fn)()
+        except Exception: pass
+    pipe = WanPipeline.from_pretrained(local_dir, vae=vae, text_encoder=None, tokenizer=None, torch_dtype=dtype)
+    pipe.scheduler = UniPCMultistepScheduler.from_config(pipe.scheduler.config, flow_shift=3.0)
+    pipe.set_progress_bar_config(disable=True)
+    try: pipe.enable_attention_slicing()
+    except Exception: pass
+    pipe.enable_model_cpu_offload()
+    return pipe
+
+def run_worker(gpu_id, idxs_str, local_dir):
+    import torch
+    from diffusers.utils import export_to_video
+    idxs = [int(x) for x in idxs_str.split(",") if x.strip()]
+    embeds = torch.load("embeds.pt", map_location="cpu", weights_only=True)
+    cur_dtype = torch.float16
+    pipe = make_pipe(local_dir, cur_dtype)
+    neg_e = embeds["neg"]
+    for i in idxs:
+        steps = 18 if i in (0, 3) else 15
+        pe, ne = embeds["pos"][i].to("cuda", dtype=cur_dtype), neg_e.to("cuda", dtype=cur_dtype)
+        frames = pipe(prompt_embeds=pe, negative_prompt_embeds=ne, height=832, width=480, num_frames=25, num_inference_steps=steps, guidance_scale=5.0, generator=torch.Generator("cuda").manual_seed(1042 + i)).frames[0]
+        arr = np.array(frames)
+        if float(arr.mean()) < 1.5 and float(arr.std()) < 1.5 and cur_dtype != torch.bfloat16:
+            print(f"[!] GPU {gpu_id} clip {i} dark -> reloading bf16", flush=True)
+            del pipe, frames, pe, ne; gc.collect(); torch.cuda.empty_cache()
+            cur_dtype = torch.bfloat16
+            pipe = make_pipe(local_dir, cur_dtype)
+            pe, ne = embeds["pos"][i].to("cuda", dtype=cur_dtype), neg_e.to("cuda", dtype=cur_dtype)
+            frames = pipe(prompt_embeds=pe, negative_prompt_embeds=ne, height=832, width=480, num_frames=25, num_inference_steps=steps, guidance_scale=5.0, generator=torch.Generator("cuda").manual_seed(2042 + i)).frames[0]
+        export_to_video(frames, f"clip_{i}.mp4", fps=16)
+        del frames, pe, ne; gc.collect(); torch.cuda.empty_cache()
+        print(f"[*] GPU {gpu_id} rendered clip_{i}.mp4 ({steps} steps)", flush=True)
 
 def assemble(durs):
     audio_p = find_asset("final_audio.wav")
@@ -87,8 +93,7 @@ def assemble(durs):
     if len(durs) >= 2:
         d0 = min(1.15, max(0.85, durs[0]))
         rem = max(1.0, total - d0)
-        tail_sum = max(0.1, sum(durs[1:]))
-        final_durs = [d0] + [rem * (x / tail_sum) for x in durs[1:]]
+        final_durs = [d0] + [rem * (x / max(0.1, sum(durs[1:]))) for x in durs[1:]]
     else: final_durs = [total]
     t_flash, t3 = final_durs[0], sum(final_durs[:3]) if len(final_durs) >= 4 else total * 0.55
 
@@ -104,13 +109,13 @@ def assemble(durs):
     print(f"[*] Assembled final_video.mp4 ({total:.2f}s)", flush=True)
 
 def main():
-    if len(sys.argv) >= 5 and sys.argv[1] == "--worker":
-        run_worker(sys.argv[2], sys.argv[3], sys.argv[4]); return
+    if len(sys.argv) >= 3 and sys.argv[1] == "--encode": encode_sub(sys.argv[2]); return
+    if len(sys.argv) >= 5 and sys.argv[1] == "--worker": run_worker(sys.argv[2], sys.argv[3], sys.argv[4]); return
     import torch
     from huggingface_hub import snapshot_download
     prompts, durs = load_beats()
     local_dir = snapshot_download(MODEL)
-    encode_all(prompts, local_dir)
+    subprocess.run([sys.executable, __file__, "--encode", local_dir], check=True)
     idxs = list(range(len(prompts)))
     if torch.cuda.device_count() >= 2 and len(idxs) >= 2:
         g0, g1 = [str(i) for i in idxs if i % 2 == 0], [str(i) for i in idxs if i % 2 == 1]
