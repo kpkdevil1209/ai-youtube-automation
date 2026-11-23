@@ -1,8 +1,6 @@
 name: SILENT SIGNAL - Full Kaggle T4 AI Shorts Engine
 
 on:
-  schedule:
-    - cron: '23 21,1,4 * * *' # Quietest Global Kaggle GPU Windows -> US/UK Prime Schedule
   workflow_dispatch:
 
 permissions:
@@ -151,7 +149,7 @@ jobs:
           Q_COUNT=0
           for i in $(seq 1 260); do
             STATUS_OUT=$(kaggle kernels status "$KERNEL_ID" 2>&1 || true)
-            echo "[$i/200] $STATUS_OUT"
+            echo "[$i/260] $STATUS_OUT"
             if echo "$STATUS_OUT" | grep -qi "complete"; then break; fi
             if echo "$STATUS_OUT" | grep -qiE "error|cancelled"; then
               kaggle kernels output "$KERNEL_ID" -p . || true
