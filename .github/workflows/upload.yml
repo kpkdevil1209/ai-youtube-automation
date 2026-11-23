@@ -2,7 +2,7 @@ name: SILENT SIGNAL - Full Kaggle T4 AI Shorts Engine
 
 on:
   schedule:
-    - cron: '17 21,0,4 * * *' # Quietest Global Kaggle GPU Windows -> US/UK Prime Schedule
+    - cron: '23 21,1,4 * * *' # Quietest Global Kaggle GPU Windows -> US/UK Prime Schedule
   workflow_dispatch:
 
 permissions:
