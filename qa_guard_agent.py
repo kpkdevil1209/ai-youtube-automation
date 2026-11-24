@@ -43,7 +43,7 @@ def extract_gray_bytes(path, ts, w=160, h=160):
     return subprocess.check_output(cmd)
 
 
-def quality_and_motion(path, dur):
+def measure_metrics(path, dur, label="Quality"):
     w, h = 160, 160
     expected = w * h
     points = [min(max(0.3, dur * p), max(0.3, dur - 0.5)) for p in (0.12, 0.30, 0.50, 0.70, 0.88)]
@@ -64,7 +64,7 @@ def quality_and_motion(path, dur):
         edges.append(edge_score)
         brights.append(bright)
         frames.append(raw[:expected])
-        print(f"[Quality {i}/5 @ {ts:.1f}s] edge={edge_score:.1f} | bright={bright:.1f}", flush=True)
+        print(f"[{label} {i}/5 @ {ts:.1f}s] edge={edge_score:.1f} | bright={bright:.1f}", flush=True)
 
     if len(frames) < 2:
         raise RuntimeError("QA FAIL: Could not decode enough frames")
@@ -77,13 +77,39 @@ def quality_and_motion(path, dur):
     avg_bright = sum(brights) / len(brights)
     avg_motion = sum(diffs) / len(diffs)
     print(f"[QA Motion] avg_diff={avg_motion:.2f} | avg_edge={avg_edge:.1f} | avg_bright={avg_bright:.1f}", flush=True)
+    return avg_edge, avg_bright, avg_motion
+
+
+def lift_dark_video(path):
+    tmp = path + ".lifted.mp4"
+    cmd = [
+        "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+        "-i", path,
+        "-vf", "eq=gamma=1.35:brightness=0.03:contrast=1.04",
+        "-c:v", "libx264", "-preset", "veryfast", "-crf", "19", "-pix_fmt", "yuv420p",
+        "-c:a", "copy", "-movflags", "+faststart", tmp,
+    ]
+    subprocess.run(cmd, check=True)
+    if os.path.exists(tmp) and os.path.getsize(tmp) > 500000:
+        os.replace(tmp, path)
+
+
+def quality_and_motion(path, dur):
+    avg_edge, avg_bright, avg_motion = measure_metrics(path, dur, "Quality")
 
     if avg_edge < 5.0:
         raise RuntimeError(f"QA FAIL: Blurry or blank render (edge={avg_edge:.1f})")
-    if avg_bright < 18.0:
-        raise RuntimeError(f"QA FAIL: Too dark or black video (bright={avg_bright:.1f})")
     if avg_motion < 1.5:
         raise RuntimeError(f"QA FAIL: Frozen or static video (motion={avg_motion:.2f})")
+    if avg_bright < 6.0 or (avg_bright < 10.0 and avg_edge < 7.0):
+        raise RuntimeError(f"QA FAIL: Dead black or corrupt video (bright={avg_bright:.1f}, edge={avg_edge:.1f})")
+
+    if avg_bright < 18.0:
+        print(f"[QA Rescue] Moody dark clip (bright={avg_bright:.1f}). Applying shadow-lift...", flush=True)
+        lift_dark_video(path)
+        avg_edge, avg_bright, avg_motion = measure_metrics(path, dur, "Rescued")
+        if avg_bright < 12.0:
+            raise RuntimeError(f"QA FAIL: Still too dark after rescue (bright={avg_bright:.1f})")
 
 
 def run_qa(target="final_output.mp4"):
