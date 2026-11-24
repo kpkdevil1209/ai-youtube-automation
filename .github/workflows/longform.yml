@@ -1,0 +1,174 @@
+name: SILENT SIGNAL - Long Form Documentary Engine
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  run-longform:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Fast Syntax Check
+        run: python -m py_compile generate_long_script.py generate_long_audio.py upload_long.py kaggle_render_long/render_long.py
+
+      - name: Cache Ollama Models
+        uses: actions/cache@v4
+        with:
+          path: ~/.ollama
+          key: ${{ runner.os }}-ollama-qwen2.5-3b-v3
+          restore-keys: |
+            ${{ runner.os }}-ollama-
+
+      - name: Cache Kokoro Human TTS Models
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/kokoro
+          key: kokoro-onnx-v1.0-v1
+
+      - name: Install Dependencies, FFmpeg, Espeak & Models
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y ffmpeg espeak-ng
+          pip install -U pip
+          pip install -U requests kokoro-onnx soundfile edge-tts google-api-python-client google-auth google-auth-oauthlib kaggle six python-slugify python-dateutil numpy
+          mkdir -p ~/.cache/kokoro
+          [ -f ~/.cache/kokoro/kokoro-v1.0.onnx ] || curl -fSL "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.1/kokoro-v1.0.onnx" -o ~/.cache/kokoro/kokoro-v1.0.onnx
+          [ -f ~/.cache/kokoro/voices-v1.0.bin ] || curl -fSL "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.1/voices-v1.0.bin" -o ~/.cache/kokoro/voices-v1.0.bin
+          if ! command -v ollama >/dev/null 2>&1; then
+            curl -fsSL https://ollama.com/install.sh | sh
+          fi
+          nohup ollama serve >/tmp/ollama.log 2>&1 &
+          for i in $(seq 1 15); do
+            curl -fsS http://127.0.0.1:11434/api/tags >/dev/null 2>&1 && break
+            sleep 1
+          done
+          if ! ollama list | grep -q "qwen2.5:3b"; then
+            ok=0
+            for r in 1 2 3; do
+              if ollama pull "qwen2.5:3b"; then ok=1; break; fi
+              sleep 8
+            done
+            [ "$ok" -eq 1 ] || exit 1
+          fi
+
+      - name: Step 1 - Generate 7-Chapter Mystery Script
+        run: |
+          pgrep -x ollama >/dev/null || (nohup ollama serve >/tmp/ollama.log 2>&1 & sleep 4)
+          rm -f long_script.json long_audio.wav long_subtitles.srt long_final.mp4 thumbnail.jpg
+          python -u generate_long_script.py
+
+      - name: Step 2 - Generate Human Blend Voice & Mastering
+        run: python -u generate_long_audio.py
+
+      - name: Step 3 - Setup Kaggle Credentials
+        env:
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
+          KAGGLE_JSON: ${{ secrets.KAGGLE_JSON }}
+        run: |
+          mkdir -p ~/.kaggle
+          if [ -n "$KAGGLE_JSON" ]; then echo "$KAGGLE_JSON" > ~/.kaggle/kaggle.json
+          else echo "{\"username\":\"$KAGGLE_USERNAME\",\"key\":\"$KAGGLE_KEY\"}" > ~/.kaggle/kaggle.json; fi
+          chmod 600 ~/.kaggle/kaggle.json
+
+      - name: Step 4 - Kaggle T4 x2 Long-Form Render
+        run: |
+          rm -rf kaggle_long_assets && mkdir -p kaggle_long_assets
+          cp -f long_audio.wav long_script.json kaggle_long_assets/
+          cp -f long_subtitles.srt kaggle_long_assets/ 2>/dev/null || true
+          KUSER=$(python3 -c 'import json, os; print(json.load(open(os.path.expanduser("~/.kaggle/kaggle.json")))["username"])')
+          python3 -c 'import json, sys; u=sys.argv[1]; json.dump({"title":"silent-signal-long-assets","id":f"{u}/silent-signal-long-assets","licenses":[{"name":"CC0-1.0"}]}, open("kaggle_long_assets/dataset-metadata.json","w"), indent=2)' "$KUSER"
+          kaggle datasets version -p kaggle_long_assets -m "Long Run ${{ github.run_number }}-${{ github.run_attempt }}" --dir-mode zip || kaggle datasets create -p kaggle_long_assets --dir-mode zip
+
+          echo "[*] Waiting for Kaggle dataset ready..."
+          for d in $(seq 1 12); do
+            DS=$(kaggle datasets status "$KUSER/silent-signal-long-assets" 2>&1 || true)
+            echo "[Dataset $d/12] $DS"
+            echo "$DS" | grep -qi "ready" && break
+            sleep 10
+          done
+          sleep 15
+
+          python3 -c 'import json, os; u=json.load(open(os.path.expanduser("~/.kaggle/kaggle.json")))["username"]; p="kaggle_render_long/kernel-metadata.json"; m=json.load(open(p)); s="silent-signal-long-v1"; m["id"]=f"{u}/{s}"; m["title"]=s; m["enable_gpu"]=True; m["enable_internet"]=True; m["dataset_sources"]=[f"{u}/silent-signal-long-assets"]; json.dump(m,open(p,"w"),indent=2); print("Synced:",m["id"])'
+          KERNEL_ID=$(python3 -c 'import json; print(json.load(open("kaggle_render_long/kernel-metadata.json"))["id"])')
+
+          for w in $(seq 1 16); do
+            CUR_ST=$(kaggle kernels status "$KERNEL_ID" 2>&1 || true)
+            echo "[Pre-Check $w/16] $CUR_ST"
+            echo "$CUR_ST" | grep -qi "cancel_acknowledged" || break
+            sleep 15
+          done
+
+          if echo "$CUR_ST" | grep -qiE "queued|running"; then
+            echo "[*] Already active on Kaggle - attaching!"
+          else
+            set +e
+            PUSH_OUT=$(kaggle kernels push -p kaggle_render_long --accelerator NvidiaTeslaT4 2>&1)
+            PUSH_RC=$?
+            if [ $PUSH_RC -ne 0 ] && echo "$PUSH_OUT" | grep -qiE "unrecognized|invalid|accelerator"; then
+              PUSH_OUT=$(kaggle kernels push -p kaggle_render_long 2>&1); PUSH_RC=$?
+            fi
+            set -e
+            echo "$PUSH_OUT"
+            if [ $PUSH_RC -ne 0 ] || echo "$PUSH_OUT" | grep -qi "409"; then
+              NEW_SLUG="silent-long-v${{ github.run_number }}-${{ github.run_attempt }}-$(date +%s | tail -c 5)"
+              python3 -c 'import json, os, sys; ns=sys.argv[1]; u=json.load(open(os.path.expanduser("~/.kaggle/kaggle.json")))["username"]; p="kaggle_render_long/kernel-metadata.json"; m=json.load(open(p)); m["id"]=f"{u}/{ns}"; m["title"]=ns; m["enable_gpu"]=True; m["enable_internet"]=True; m["dataset_sources"]=[f"{u}/silent-signal-long-assets"]; json.dump(m,open(p,"w"),indent=2)' "$NEW_SLUG"
+              kaggle kernels push -p kaggle_render_long --accelerator NvidiaTeslaT4 || kaggle kernels push -p kaggle_render_long
+              KERNEL_ID=$(python3 -c 'import json; print(json.load(open("kaggle_render_long/kernel-metadata.json"))["id"])')
+            fi
+          fi
+
+          echo "[*] Polling Kaggle Long-Form Kernel: $KERNEL_ID"
+          Q_COUNT=0
+          for i in $(seq 1 480); do
+            STATUS_OUT=$(kaggle kernels status "$KERNEL_ID" 2>&1 || true)
+            echo "[$i/480] $STATUS_OUT"
+            if echo "$STATUS_OUT" | grep -qi "complete"; then break; fi
+            if echo "$STATUS_OUT" | grep -qiE "error|cancelled"; then
+              kaggle kernels output "$KERNEL_ID" -p . || true
+              cat *.log 2>/dev/null || true
+              exit 1
+            fi
+            if echo "$STATUS_OUT" | grep -qi "queued"; then
+              Q_COUNT=$((Q_COUNT + 1))
+              if [ "$Q_COUNT" -ge 100 ]; then
+                echo "[!] Still QUEUED after 50 min."; exit 1
+              fi
+            fi
+            sleep 30
+          done
+
+          kaggle kernels output "$KERNEL_ID" -p .
+          ls -lh long_final.mp4 thumbnail.jpg
+          [ -f long_final.mp4 ]
+
+      - name: Step 5 - Upload Long-Form Documentary to YouTube
+        env:
+          YOUTUBE_TOKEN_PICKLE: ${{ secrets.YOUTUBE_TOKEN_PICKLE }}
+        run: python -u upload_long.py
+
+      - name: Step 6 - Save Long-Form Topic History
+        run: |
+          git config user.name "Silent Signal Bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add posted_long_history.json requested_topics.json 2>/dev/null || true
+          if ! git diff --cached --quiet; then
+            git commit -m "Long-Form upload run ${{ github.run_number }}"
+            for r in 1 2 3; do
+              git pull --rebase && git push && break
+              sleep 5
+            done
+          fi
