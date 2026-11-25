@@ -1,5 +1,6 @@
 import os, sys, json, time, gc, shutil, textwrap, subprocess
 
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 os.environ["HF_HOME"] = "/tmp/hf_cache"
 os.environ["TMPDIR"] = "/tmp"
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -7,18 +8,26 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 MODEL_ID = "Wan-AI/Wan2.1-T2V-1.3B-Diffusers"
 WORK_DIR = "/tmp/work_long"
 OUT_DIR = "/kaggle/working"
+NEG = "static image, frozen frame, blurry, distorted anatomy, text, watermark, subtitle, logo, overexposed, shaky, low quality, cartoon, overall gray"
+TAIL = ", cinematic 8k documentary cinematography, anamorphic lens, atmospheric depth, subtle slow camera motion, moody volumetric lighting"
 
 
 def ensure_packages():
-    try:
-        import PIL, numpy, torch, transformers, accelerate, ftfy  # noqa: F401
-        from diffusers import WanPipeline, AutoencoderKLWan  # noqa: F401
-    except Exception:
-        print("[*] Installing diffusers/ftfy/pillow...", flush=True)
+    chk = "from diffusers import AutoencoderKLWan, WanPipeline; import transformers, accelerate, peft, huggingface_hub, ftfy, PIL, numpy, torch"
+    if subprocess.run([sys.executable, "-c", chk], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0:
+        return
+    print("[*] Syncing diffusers/transformers/peft stack cleanly...", flush=True)
+    subprocess.run(
+        [sys.executable, "-m", "pip", "install", "-q", "--upgrade", "--no-cache-dir", "diffusers", "transformers", "accelerate", "peft", "huggingface_hub", "ftfy", "pillow", "numpy"],
+        check=True,
+    )
+    if subprocess.run([sys.executable, "-c", chk], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode != 0:
+        print("[!] Pinning compatible transformers<5 stack...", flush=True)
         subprocess.run(
-            [sys.executable, "-m", "pip", "install", "-q", "--upgrade", "diffusers", "transformers", "accelerate", "ftfy", "pillow", "numpy"],
+            [sys.executable, "-m", "pip", "install", "-q", "--no-cache-dir", "transformers>=4.49.0,<5.0.0", "diffusers>=0.32.2", "peft>=0.14.0", "accelerate", "huggingface_hub", "ftfy"],
             check=True,
         )
+    subprocess.run([sys.executable, "-c", chk], check=True)
 
 
 def run_cmd(cmd, desc="cmd"):
@@ -43,23 +52,46 @@ def probe_dur(path):
 
 
 def install_chunked_sdpa(chunk_size=512):
-    import torch.nn.functional as F, torch
+    import torch, torch.nn.functional as F
 
     orig = F.scaled_dot_product_attention
+    if getattr(orig, "_is_chunked", False):
+        return
 
-    def chunked(q, k, v, attn_mask=None, dropout_p=0.0, is_causal=False, scale=None, **kw):
-        if scale is not None:
-            kw["scale"] = scale
-        ql = q.shape[-2]
-        if ql <= chunk_size or is_causal or (attn_mask is not None and attn_mask.shape[-2] not in (1, ql)):
-            return orig(q, k, v, attn_mask=attn_mask, dropout_p=dropout_p, is_causal=is_causal, **kw)
-        outs = []
-        for i in range(0, ql, chunk_size):
-            ms = None if attn_mask is None else (attn_mask if attn_mask.shape[-2] == 1 else attn_mask[..., i : i + chunk_size, :])
-            outs.append(orig(q[..., i : i + chunk_size, :], k, v, attn_mask=ms, dropout_p=dropout_p, is_causal=False, **kw))
-        return torch.cat(outs, dim=-2)
+    def chunked(q, k, v, attn_mask=None, dropout_p=0.0, is_causal=False, scale=None, enable_gqa=False, **kw):
+        if enable_gqa:
+            kw["enable_gqa"] = enable_gqa
+        if q.is_cuda and q.ndim == 4 and q.dtype != torch.float16 and attn_mask is None and not is_causal and q.shape[-2] > chunk_size:
+            return torch.cat([orig(q[:, :, i : i + chunk_size, :], k, v, attn_mask=None, dropout_p=dropout_p, is_causal=False, scale=scale, **kw) for i in range(0, q.shape[-2], chunk_size)], dim=-2)
+        return orig(q, k, v, attn_mask=attn_mask, dropout_p=dropout_p, is_causal=is_causal, scale=scale, **kw)
 
+    chunked._is_chunked = True
     F.scaled_dot_product_attention = chunked
+    torch.nn.functional.scaled_dot_product_attention = chunked
+
+
+def encode_sub(local_dir, jobs_file, embeds_path):
+    import torch
+    from diffusers import WanPipeline
+
+    jobs = json.load(open(jobs_file, "r", encoding="utf-8"))
+    print(f"[*] Encoding {len(jobs)} prompts in UMT5 bfloat16...", flush=True)
+    enc = WanPipeline.from_pretrained(local_dir, transformer=None, vae=None, torch_dtype=torch.bfloat16)
+    try:
+        enc.text_encoder.set_input_embeddings(enc.text_encoder.get_input_embeddings())
+    except Exception:
+        pass
+    enc.enable_sequential_cpu_offload()
+    pos_list, neg_e = [], None
+    with torch.no_grad():
+        for i, job in enumerate(jobs, 1):
+            pe, ne = enc.encode_prompt(prompt=job["prompt"].strip() + TAIL, negative_prompt=NEG, do_classifier_free_guidance=True, max_sequence_length=226, device="cuda")
+            pos_list.append(pe.cpu().to(torch.bfloat16))
+            if neg_e is None:
+                neg_e = ne.cpu().to(torch.bfloat16)
+            if i % 5 == 0 or i == len(jobs):
+                print(f"[*] Encoded prompt {i}/{len(jobs)}", flush=True)
+    torch.save({"pos": pos_list, "neg": neg_e}, embeds_path)
 
 
 def save_np_video(arr, out_mp4, fps=16):
@@ -79,29 +111,38 @@ def save_np_video(arr, out_mp4, fps=16):
     return True, luma
 
 
-def worker_main(gpu_idx, job_file):
+def worker_main(gpu_idx, job_file, local_dir, embeds_path):
     import torch
     from diffusers import AutoencoderKLWan, WanPipeline
+    from diffusers.schedulers.scheduling_unipc_multistep import UniPCMultistepScheduler
 
     jobs = json.load(open(job_file, "r", encoding="utf-8"))
     if not jobs:
         return
     install_chunked_sdpa(512)
-    vae = AutoencoderKLWan.from_pretrained(MODEL_ID, subfolder="vae", torch_dtype=torch.float32)
-    pipe = WanPipeline.from_pretrained(MODEL_ID, vae=vae, torch_dtype=torch.bfloat16).to("cuda")
-    neg = "static image, frozen frame, blurry, distorted anatomy, text, watermark, subtitle, logo, overexposed, shaky, low quality, cartoon"
-    tail = ", cinematic 8k documentary cinematography, anamorphic lens, atmospheric depth, subtle slow camera motion, moody volumetric lighting"
+    embeds = torch.load(embeds_path, map_location="cpu", weights_only=True)
+    vae = AutoencoderKLWan.from_pretrained(local_dir, subfolder="vae", torch_dtype=torch.float32)
+    for fn in ("enable_tiling", "enable_slicing"):
+        try:
+            getattr(vae, fn)()
+        except Exception:
+            pass
+    pipe = WanPipeline.from_pretrained(local_dir, vae=vae, text_encoder=None, tokenizer=None, torch_dtype=torch.bfloat16)
+    pipe.scheduler = UniPCMultistepScheduler.from_config(pipe.scheduler.config, flow_shift=3.0)
+    pipe.set_progress_bar_config(disable=True)
+    pipe.enable_model_cpu_offload()
+    neg_e = embeds["neg"]
 
     for i, job in enumerate(jobs, 1):
         out_p = job["out_mp4"]
         if os.path.exists(out_p) and os.path.getsize(out_p) > 10240:
             print(f"[GPU {gpu_idx}] [{i}/{len(jobs)}] Cached {os.path.basename(out_p)}", flush=True)
             continue
-        t0 = time.time()
-        ok = False
+        t0, ok = time.time(), False
+        pe, ne = embeds["pos"][int(job["eidx"])].to("cuda", dtype=torch.bfloat16), neg_e.to("cuda", dtype=torch.bfloat16)
         for att in range(2):
             gen = torch.Generator(device="cuda").manual_seed(int(job["seed"]) + att * 777)
-            out = pipe(prompt=job["prompt"].strip() + tail, negative_prompt=neg, height=480, width=832, num_frames=21, num_inference_steps=int(job["steps"]), guidance_scale=5.2, generator=gen, output_type="np")
+            out = pipe(prompt_embeds=pe, negative_prompt_embeds=ne, height=480, width=832, num_frames=21, num_inference_steps=int(job["steps"]), guidance_scale=5.0, generator=gen, output_type="np")
             arr = out.frames[0]
             ok, luma = save_np_video(arr, out_p, 16)
             del out, arr
@@ -110,6 +151,7 @@ def worker_main(gpu_idx, job_file):
             if ok:
                 print(f"[GPU {gpu_idx}] [{i}/{len(jobs)}] {os.path.basename(out_p)} (luma={luma:.1f}, {time.time()-t0:.1f}s)", flush=True)
                 break
+        del pe, ne
         if not ok:
             raise RuntimeError(f"Dark clip failure: {out_p}")
 
@@ -222,7 +264,7 @@ def build_chapter(idx, ch_dur, ch_title, hd_clips, v_enc, tmp_dir, out_mp4):
 
 def coordinator_main():
     import torch
-    from diffusers import AutoencoderKLWan, WanPipeline
+    from huggingface_hub import snapshot_download
 
     sp, ap = find_input("long_script.json"), find_input("long_audio.wav")
     if not sp or not ap:
@@ -235,12 +277,8 @@ def coordinator_main():
         os.makedirs(os.path.join(WORK_DIR, d), exist_ok=True)
     os.makedirs(OUT_DIR, exist_ok=True)
 
-    _ = AutoencoderKLWan.from_pretrained(MODEL_ID, subfolder="vae", torch_dtype=torch.float32)
-    _ = WanPipeline.from_pretrained(MODEL_ID, torch_dtype=torch.bfloat16)
-    del _
-    gc.collect()
-
-    all_jobs, ch_map = [], []
+    local_dir = snapshot_download(MODEL_ID)
+    all_jobs, ch_map, eidx = [], [], 0
     for ci, ch in enumerate(chapters):
         sc = [s for s in ch.get("scenes", []) if isinstance(s, str) and s.strip()]
         hero = (ch.get("hero_prompt") or "").strip()
@@ -250,27 +288,31 @@ def coordinator_main():
         c_files = []
         for si, p_txt in enumerate(pr[:5]):
             out_c = os.path.join(WORK_DIR, "clips", f"ch{ci:02d}_s{si:02d}.mp4")
-            all_jobs.append({"out_mp4": out_c, "prompt": p_txt, "steps": 14 if (ci in (0, 5, 6) and si == 0) else 12, "seed": 4200 + ci * 100 + si * 13})
+            all_jobs.append({"eidx": eidx, "out_mp4": out_c, "prompt": p_txt, "steps": 14 if (ci in (0, 5, 6) and si == 0) else 12, "seed": 4200 + ci * 100 + si * 13})
             c_files.append(out_c)
+            eidx += 1
         ch_map.append(c_files)
+
+    j_all = os.path.join(WORK_DIR, "all_jobs.json")
+    embeds_path = os.path.join(WORK_DIR, "embeds.pt")
+    json.dump(all_jobs, open(j_all, "w"))
+    subprocess.run([sys.executable, os.path.abspath(__file__), "--encode", local_dir, j_all, embeds_path], check=True)
 
     if torch.cuda.device_count() >= 2:
         jf0, jf1 = os.path.join(WORK_DIR, "j0.json"), os.path.join(WORK_DIR, "j1.json")
         json.dump(all_jobs[0::2], open(jf0, "w"))
         json.dump(all_jobs[1::2], open(jf1, "w"))
-        p0 = subprocess.Popen([sys.executable, os.path.abspath(__file__), "--worker", "0", jf0], env=dict(os.environ, CUDA_VISIBLE_DEVICES="0"))
-        p1 = subprocess.Popen([sys.executable, os.path.abspath(__file__), "--worker", "1", jf1], env=dict(os.environ, CUDA_VISIBLE_DEVICES="1"))
+        p0 = subprocess.Popen([sys.executable, os.path.abspath(__file__), "--worker", "0", jf0, local_dir, embeds_path], env=dict(os.environ, CUDA_VISIBLE_DEVICES="0"))
+        p1 = subprocess.Popen([sys.executable, os.path.abspath(__file__), "--worker", "1", jf1, local_dir, embeds_path], env=dict(os.environ, CUDA_VISIBLE_DEVICES="1"))
         p0.wait(), p1.wait()
     else:
-        jf = os.path.join(WORK_DIR, "js.json")
-        json.dump(all_jobs, open(jf, "w"))
-        run_cmd([sys.executable, os.path.abspath(__file__), "--worker", "0", jf], "Single GPU")
+        run_cmd([sys.executable, os.path.abspath(__file__), "--worker", "0", j_all, local_dir, embeds_path], "Single GPU")
 
     miss = [j for j in all_jobs if not os.path.exists(j["out_mp4"]) or os.path.getsize(j["out_mp4"]) < 10240]
     if miss:
         jfr = os.path.join(WORK_DIR, "jr.json")
         json.dump(miss, open(jfr, "w"))
-        run_cmd([sys.executable, os.path.abspath(__file__), "--worker", "0", jfr], "Retry missing")
+        run_cmd([sys.executable, os.path.abspath(__file__), "--worker", "0", jfr, local_dir, embeds_path], "Retry missing")
 
     hd_map = []
     for ci, raws in enumerate(ch_map):
@@ -311,8 +353,10 @@ def coordinator_main():
 
 
 if __name__ == "__main__":
-    ensure_packages()
-    if len(sys.argv) >= 4 and sys.argv[1] == "--worker":
-        worker_main(int(sys.argv[2]), sys.argv[3])
+    if "--encode" in sys.argv:
+        encode_sub(sys.argv[2], sys.argv[3], sys.argv[4])
+    elif "--worker" in sys.argv:
+        worker_main(int(sys.argv[2]), sys.argv[3], sys.argv[4], sys.argv[5])
     else:
+        ensure_packages()
         coordinator_main()
