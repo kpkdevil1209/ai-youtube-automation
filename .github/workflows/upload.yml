@@ -31,21 +31,12 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-ollama-
 
-      - name: Cache Kokoro Human TTS Models
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/kokoro
-          key: kokoro-onnx-v1.0-v1
-
-      - name: Install Dependencies, FFmpeg, Espeak & Models
+      - name: Install Dependencies & Scout Tools
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y ffmpeg espeak-ng
+          sudo apt-get install -y ffmpeg
           pip install -U pip
-          pip install -U requests kokoro-onnx soundfile edge-tts google-api-python-client google-auth google-auth-oauthlib kaggle six python-slugify python-dateutil numpy
-          mkdir -p ~/.cache/kokoro
-          [ -f ~/.cache/kokoro/kokoro-v1.0.onnx ] || curl -fSL "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.1/kokoro-v1.0.onnx" -o ~/.cache/kokoro/kokoro-v1.0.onnx
-          [ -f ~/.cache/kokoro/voices-v1.0.bin ] || curl -fSL "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.1/voices-v1.0.bin" -o ~/.cache/kokoro/voices-v1.0.bin
+          pip install -U requests google-api-python-client google-auth google-auth-oauthlib kaggle six python-slugify python-dateutil numpy
           if ! command -v ollama >/dev/null 2>&1; then
             curl -fsSL https://ollama.com/install.sh | sh
           fi
@@ -69,25 +60,13 @@ jobs:
         run: |
           if [ -f empire_safety_shield.py ]; then python -u empire_safety_shield.py; fi
 
-      - name: Step 1 - Live Viral Trend & Pillar Scout
+      - name: Step 1 - Live Viral Trend & Verified Dossier Scout
         run: |
           pgrep -x ollama >/dev/null || (nohup ollama serve >/tmp/ollama.log 2>&1 & sleep 4)
-          rm -f trending_topic.json
+          rm -f trending_topic.json current_script.json final_audio.wav beat_meta.json subtitles* final_output.mp4 final_video.mp4
           python -u viral_trend_agent.py
 
-      - name: Step 2 - AI 5-Beat Documentary Scriptwriter
-        run: |
-          pgrep -x ollama >/dev/null || (nohup ollama serve >/tmp/ollama.log 2>&1 & sleep 4)
-          rm -f current_script.json final_audio.wav subtitles* final_output.mp4 final_video.mp4
-          python -u generate_script.py
-
-      - name: Step 3 - Kokoro Human Blend Voice, Drone & ASS Captions
-        run: python -u generate_audio.py
-
-      - name: Step 4 - Clean Stale Repo Assets
-        run: rm -f kaggle_render/raw_gameplay.mp4 kaggle_render/final_audio.wav kaggle_render/current_script.json kaggle_render/subtitles*
-
-      - name: Step 5 - Setup Kaggle Credentials
+      - name: Step 2 - Setup Kaggle Credentials
         env:
           KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
           KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
@@ -98,11 +77,11 @@ jobs:
           else echo "{\"username\":\"$KAGGLE_USERNAME\",\"key\":\"$KAGGLE_KEY\"}" > ~/.kaggle/kaggle.json; fi
           chmod 600 ~/.kaggle/kaggle.json
 
-      - name: Step 6 - Kaggle T4 x2 GPU Full AI Video Render
+      - name: Step 3 - Kaggle T4 x2 All-GPU (14B Script + Chatterbox + 10-Shot Wan2.1)
         run: |
           rm -rf kaggle_assets && mkdir -p kaggle_assets
-          cp -f final_audio.wav current_script.json kaggle_assets/
-          cp -f subtitles.ass subtitles.srt subtitles_en.srt kaggle_assets/ 2>/dev/null || true
+          cp -f trending_topic.json kaggle_assets/
+          [ -f posted_history.json ] && cp -f posted_history.json kaggle_assets/ || true
           KUSER=$(python3 -c 'import json, os; print(json.load(open(os.path.expanduser("~/.kaggle/kaggle.json")))["username"])')
           python3 -c 'import json, sys; u=sys.argv[1]; json.dump({"title":"devil-insanity-assets","id":f"{u}/devil-insanity-assets","licenses":[{"name":"CC0-1.0"}]}, open("kaggle_assets/dataset-metadata.json","w"), indent=2)' "$KUSER"
           kaggle datasets version -p kaggle_assets -m "Run ${{ github.run_number }}-${{ github.run_attempt }}" --dir-mode zip || kaggle datasets create -p kaggle_assets --dir-mode zip
@@ -147,9 +126,9 @@ jobs:
 
           echo "[*] Polling Kaggle T4 x2 Kernel: $KERNEL_ID"
           Q_COUNT=0
-          for i in $(seq 1 260); do
+          for i in $(seq 1 300); do
             STATUS_OUT=$(kaggle kernels status "$KERNEL_ID" 2>&1 || true)
-            echo "[$i/260] $STATUS_OUT"
+            echo "[$i/300] $STATUS_OUT"
             if echo "$STATUS_OUT" | grep -qi "complete"; then break; fi
             if echo "$STATUS_OUT" | grep -qiE "error|cancelled"; then
               kaggle kernels output "$KERNEL_ID" -p . || true
@@ -158,31 +137,31 @@ jobs:
             fi
             if echo "$STATUS_OUT" | grep -qi "queued"; then
               Q_COUNT=$((Q_COUNT + 1))
-              if [ "$Q_COUNT" -ge 150 ]; then
-                echo "[!] Still QUEUED after 37.5 min."; exit 1
+              if [ "$Q_COUNT" -ge 160 ]; then
+                echo "[!] Still QUEUED after 40 min."; exit 1
               fi
             fi
             sleep 15
           done
           kaggle kernels output "$KERNEL_ID" -p .
           [ -f final_output.mp4 ] || mv -f final_video.mp4 final_output.mp4
-          ls -lh final_output.mp4
+          ls -lh final_output.mp4 current_script.json
 
-      - name: Step 7 - Technical QA & YouTube Global Upload
+      - name: Step 4 - Technical QA & YouTube Global Upload
         env:
           YOUTUBE_TOKEN_PICKLE: ${{ secrets.YOUTUBE_TOKEN_PICKLE }}
         run: |
           if [ -f qa_guard_agent.py ]; then python -u qa_guard_agent.py final_output.mp4; fi
           python -u upload_video.py
 
-      - name: Step 8 - Comment Auto-Reply & Topic-Mining Bot
+      - name: Step 5 - Comment Auto-Reply & Topic-Mining Bot
         env:
           YOUTUBE_TOKEN_PICKLE: ${{ secrets.YOUTUBE_TOKEN_PICKLE }}
         run: |
           pgrep -x ollama >/dev/null || (nohup ollama serve >/tmp/ollama.log 2>&1 & sleep 4)
           python -u comment_reply_bot.py || true
 
-      - name: Step 9 - Save Pipeline State & Viewer Requests
+      - name: Step 6 - Save Pipeline State & Viewer Requests
         run: |
           git config --global user.name "Silent Signal Bot"
           git config --global user.email "bot@silentsignal.local"
