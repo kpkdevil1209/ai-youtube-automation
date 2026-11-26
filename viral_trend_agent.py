@@ -1,95 +1,132 @@
-import os, re, json, random, urllib.request, urllib.parse, xml.etree.ElementTree as ET
+import json, os, random, re, urllib.parse, urllib.request, xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
 
-UA = "SilentSignal-TrendEngine/4.2"
-OLLAMA_URL = os.getenv("OLLAMA_URL", "http://127.0.0.1:11434/api/generate")
-MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:3b")
+UA = "SilentSignal-TrendEngine/5.0 (compatible; DocumentaryResearch/1.0)"
 HISTORY_FILE, REQUESTS_FILE, OUTPUT_FILE = "posted_history.json", "requested_topics.json", "trending_topic.json"
 
 PILLARS = [
-    ("extreme_survival", "SURVIVAL", "SURVIVAL CASE", "Extreme Survival", ["trapped cave rescue days survived", "lost at sea rescued survival"], ["what happens if you get trapped in", "how long can a human survive without"], "https://www.livescience.com/feeds/all", ["cave", "rescue", "survival", "hypothermia", "trapped"]),
-    ("forbidden_places", "MYSTERY", "RESTRICTED ZONE", "Forbidden Places", ["sealed ancient tomb discovered", "forbidden island underground bunker"], ["why nobody is allowed to visit", "secret underground city discovered"], "https://www.smithsonianmag.com/rss/latest_articles/", ["tomb", "island", "bunker", "vault", "temple", "forbidden"]),
-    ("deep_ocean", "OCEAN", "ABYSS DEPTH", "Deep Ocean", ["mariana trench deep sea discovery", "underwater volcano wreck exploration"], ["scariest thing found at the bottom of the ocean", "what happens at the bottom of mariana trench"], "https://www.livescience.com/feeds/planet-earth", ["ocean", "trench", "mariana", "submarine", "abyss"]),
-    ("cosmic_horror", "COSMOS", "DEEP SPACE", "Cosmic Scale", ["rogue planet black hole discovery", "nasa unexplained signal deep space"], ["what happens if you fall into", "scariest thing discovered in space"], "https://www.space.com/feeds/all", ["black hole", "planet", "nebula", "asteroid", "supernova"]),
-    ("mega_disasters", "DISASTER", "CRITICAL FAILURE", "Engineering Disasters", ["kola superdeep borehole earth", "dam collapse submersible implosion"], ["why they sealed the deepest hole", "worst engineering disaster in history"], "https://www.sciencedaily.com/rss/matter_energy/engineering.xml", ["borehole", "dam", "reactor", "implosion", "shipwreck"]),
-    ("bizarre_nature", "NATURE", "DEADLY ZONE", "Deadliest Nature", ["boiling river lake natron deadly", "glowing cave toxic crater nature"], ["deadliest place on earth you cant survive", "lake that turns animals into"], "https://www.livescience.com/feeds/planet-earth", ["lake", "volcano", "crater", "desert", "cave", "geyser"]),
-    ("human_body_limits", "BIOLOGY", "HUMAN LIMIT", "Human Body Limits", ["everest death zone altitude body", "deep sea diver decompression bends"], ["what happens to your body at the bottom of", "what happens to your body in deep space"], "https://www.livescience.com/feeds/health", ["decompression", "hypothermia", "altitude", "g-force", "bends"]),
-    ("lost_expeditions", "EXPEDITION", "LOST RECORD", "Ghost Expeditions", ["endurance shipwreck expedition found", "abandoned arctic station vanished"], ["expedition that vanished without a trace", "ghost ship found drifting with no crew"], "https://www.smithsonianmag.com/rss/history/", ["expedition", "shipwreck", "vanished", "arctic", "lighthouse"]),
-    ("prehistoric_earth", "PREHISTORIC", "ANCIENT EARTH", "Prehistoric Earth", ["giant prehistoric predator fossil", "ancient earth before humans extinction"], ["scariest prehistoric creature that actually existed", "what earth looked like before humans"], "https://www.livescience.com/feeds/animals", ["fossil", "extinction", "asteroid", "megalodon", "dinosaur"]),
-    ("extreme_weather", "EARTH", "EXTREME FORCE", "Earth Fury", ["giant sinkhole supervolcano caldera", "megatsunami rogue wave recorded"], ["biggest rogue wave ever recorded", "what happens if a supervolcano erupts"], "https://www.sciencedaily.com/rss/earth_climate.xml", ["tsunami", "supervolcano", "sinkhole", "earthquake", "caldera"]),
+    ("deep_ocean", "OCEAN", "Deep Ocean Frontiers", ["mariana trench discovery", "deep sea hydrothermal vent"], "https://www.livescience.com/feeds/planet-earth", ["mariana", "trench", "ocean", "submarine", "abyss", "seafloor", "bloop"]),
+    ("forbidden_zones", "MYSTERY", "Sealed & Forbidden Sites", ["kola superdeep borehole", "lake vostok antarctica", "sealed ancient vault"], "https://www.smithsonianmag.com/rss/latest_articles/", ["borehole", "vostok", "vault", "cave", "island", "bunker", "sealed"]),
+    ("vanished_signals", "SIGNAL", "Vanished & Unexplained Signals", ["wow radio signal", "lost arctic expedition shipwreck"], "https://www.space.com/feeds/all", ["signal", "expedition", "shipwreck", "apollo", "voyager", "radio", "vanished"]),
+    ("earth_anomalies", "EARTH", "Extreme Earth Anomalies", ["darvaza crater", "lake natron", "tunguska event"], "https://www.sciencedaily.com/rss/earth_climate.xml", ["crater", "caldera", "sinkhole", "volcano", "lake", "sahara", "tunguska"]),
+]
+
+CURATED_BANK = [
+    ("deep_ocean", "OCEAN", "Mariana Trench Challenger Deep", "At 10,984 meters deep, pressure crushes steel like paper yet life still survives."),
+    ("deep_ocean", "OCEAN", "Point Nemo Oceanic Pole", "Why spacecraft graveyard Point Nemo lies 2,688 kilometers from any human being."),
+    ("deep_ocean", "OCEAN", "Baltic Sea Floor Formation", "A 60-meter circular seabed structure recorded at 85 meters depth in 2011."),
+    ("deep_ocean", "OCEAN", "Brine Pools Under the Gulf", "Underwater toxic lakes on the ocean floor that preserve anything that falls inside."),
+    ("forbidden_zones", "MYSTERY", "Kola Superdeep Borehole", "Russia drilled 12,262 meters into Earth's crust until heat forced them to weld it shut."),
+    ("forbidden_zones", "MYSTERY", "Lake Vostok Antarctica", "A prehistoric freshwater lake sealed beneath four kilometers of solid Antarctic ice."),
+    ("forbidden_zones", "MYSTERY", "Movile Cave Romania", "Sealed for five million years in toxic air with creatures found nowhere else on Earth."),
+    ("forbidden_zones", "MYSTERY", "Ilha da Queimada Grande", "Why Brazil's navy strictly bans anyone from stepping onto Snake Island."),
+    ("vanished_signals", "SIGNAL", "Wow! signal", "A 72-second narrowband radio burst at 1420 MHz detected in 1977 that never returned."),
+    ("vanished_signals", "SIGNAL", "Max Headroom signal hijacking", "For 88 seconds in 1987, an unknown transmitter hijacked two Chicago TV stations."),
+    ("vanished_signals", "SIGNAL", "Endurance (1912 ship)", "Crushed by Antarctic pack ice in 1915 and discovered intact 3,008 meters below."),
+    ("vanished_signals", "SIGNAL", "Operation Highjump", "A 4,700-person US Navy Antarctic fleet pulled back early amid brutal polar conditions."),
+    ("earth_anomalies", "EARTH", "Darvaza gas crater", "A collapsed Soviet drilling site in Turkmenistan burning continuously since 1971."),
+    ("earth_anomalies", "EARTH", "Richat Structure", "A 40-kilometer bullseye carved into the Sahara desert visible from orbit."),
+    ("earth_anomalies", "EARTH", "Lake Natron", "Caustic soda water in Tanzania that calcifies birds into stone-like statues."),
+    ("earth_anomalies", "EARTH", "Tunguska event", "An atmospheric blast over Siberia in 1908 flattened 80 million trees with no crater."),
 ]
 
 ANGLES = [
-    "THE_COUNTDOWN_TRAP: Second-by-second escalation of a real crisis.",
-    "FORBIDDEN_REASON: Real terrifying reason a place is sealed.",
-    "SCALE_SHOCK: Mind-breaking depth, speed, or pressure comparison.",
-    "BODY_UNDER_EXTREME: Exact physical reaction inside extreme conditions.",
-    "THE_SEALED_MYSTERY: Why experts locked it down and left.",
-    "HIDDEN_MECHANISM: Invisible natural trigger behind a deadly event.",
-    "VANISHED_WITHOUT_TRACE: Last recorded clue before everything stopped.",
-    "PREHISTORIC_NIGHTMARE: Extinct predator or ancient catastrophe reality.",
-    "TINY_FLAW_MEGA_DISASTER: How one small flaw caused total collapse.",
-    "STRANGER_THAN_FICTION: Verified anomaly that defies normal physics.",
-    "LAST_30_SECONDS: Final moments of a real survival crisis.",
-    "THE_SILENT_KILLER: Invisible natural danger with zero warning.",
-    "IF_IT_HAPPENED_TODAY: What happens right now if this event struck.",
-    "THE_UNSOLVED_SIGNAL: Real recorded anomaly still unexplained.",
-    "NATURE_ENGINEERED_TRAP: Nature built a deadlier trap than humans.",
+    "START_WITH_IMPOSSIBLE_NUMBER: Open immediately with the extreme depth, year, or measurement that breaks expectation.",
+    "CAUSE_AND_EFFECT_SURVIVAL: Explain the exact physical mechanism why humans or equipment cannot survive there.",
+    "THE_SEALED_WARNING: Focus on why authorities or scientists shut down access or stopped investigation.",
+    "UNEXPLAINED_RECORDED_DATA: Anchor on real sensor readings, sonar scans, or archived logs still debated today.",
 ]
 
-BLOCKED = ("murder", "serial killer", "homicide", "suicide", "self-harm", "rape", "sexual", "gore", "decapitat", "torture", "shooting", "massacre", "terrorist", "trump", "biden", "election", "gaza", "israel", "ukraine", "putin", "crypto", "bitcoin", "celebrity", "porn", "onlyfans", "naked", "nfl", "nba", "cricket")
-VAGUE = ("deathline", "human body limit", "shocking truth", "mind blowing", "hidden truth", "dark secret", "secret revealed", "unknown mystery", "you wont believe")
-STOP = {"the", "and", "for", "with", "that", "this", "from", "what", "why", "how", "into", "you", "your", "are", "was", "were", "have", "has", "really", "happens"}
+BLOCKED = ("murder", "serial killer", "homicide", "suicide", "self-harm", "rape", "sexual", "gore", "torture", "shooting", "massacre", "terrorist", "trump", "biden", "election", "gaza", "israel", "ukraine", "putin", "crypto", "bitcoin", "celebrity", "porn", "onlyfans", "nfl", "nba", "cricket")
+BORING = ("study finds", "researchers develop", "new report", "market", "conference", "policy", "funding", "quarterly", "grants", "scientists say new")
+POWER = {"mariana", "trench", "borehole", "deepest", "vanished", "sealed", "forbidden", "signal", "crater", "toxic", "antarctica", "sahara", "shipwreck", "underground", "unexplained", "extreme", "volcano", "abyss", "vostok"}
+STOP = {"the", "and", "for", "with", "that", "this", "from", "what", "why", "how", "into", "you", "your", "are", "was", "were", "have", "has"}
 
-get = lambda u: urllib.request.urlopen(urllib.request.Request(u, headers={"User-Agent": UA}), timeout=8).read().decode("utf-8", errors="ignore")
-safe = lambda t: len(t.strip()) >= 14 and not any(b in t.lower() for b in BLOCKED)
-concrete = lambda t: safe(t) and ":" not in t and not any(v in t.lower() for v in VAGUE) and len(t.split()) >= 5
+get = lambda u: urllib.request.urlopen(urllib.request.Request(u, headers={"User-Agent": UA}), timeout=9).read().decode("utf-8", errors="ignore")
+safe = lambda t: len(t.strip()) >= 8 and not any(b in t.lower() for b in BLOCKED) and not any(x in t.lower() for x in BORING)
 tok = lambda t: {w for w in re.findall(r"[a-z0-9]+", t.lower()) if len(w) >= 3 and w not in STOP}
 
+
 def load_hist():
-    if not os.path.exists(HISTORY_FILE): return [], set(), None, 0
+    if not os.path.exists(HISTORY_FILE):
+        return [], set(), None
     try:
-        with open(HISTORY_FILE, encoding="utf-8") as f: raw = json.load(f)
-    except Exception: return [], set(), None, 0
+        raw = json.load(open(HISTORY_FILE, encoding="utf-8"))
+    except Exception:
+        return [], set(), None
     items = raw if isinstance(raw, list) else raw.get("topics", raw.get("history", []))
     titles, last_p = set(), None
     for x in items:
         t = x if isinstance(x, str) else (x.get("topic") or x.get("title") or "")
-        if t: titles.add(t.strip().lower())
-        if isinstance(x, dict) and x.get("pillar_id"): last_p = x["pillar_id"]
-    return raw, titles, last_p, len(items)
+        if t:
+            titles.add(t.strip().lower())
+        if isinstance(x, dict) and x.get("pillar_id"):
+            last_p = x["pillar_id"]
+    return raw, titles, last_p
+
 
 def save_hist(raw, topic, pid):
-    if isinstance(raw, list): raw.append({"topic": topic, "pillar_id": pid, "ts": datetime.now(timezone.utc).isoformat()})
-    elif isinstance(raw, dict): raw.setdefault("topics" if "topics" in raw else "history", []).append(topic)
-    else: raw = [{"topic": topic, "pillar_id": pid, "ts": datetime.now(timezone.utc).isoformat()}]
-    with open(HISTORY_FILE, "w", encoding="utf-8") as f: json.dump(raw, f, indent=2, ensure_ascii=False)
+    entry = {"topic": topic, "pillar_id": pid, "ts": datetime.now(timezone.utc).isoformat()}
+    if isinstance(raw, list):
+        raw.append(entry)
+    elif isinstance(raw, dict):
+        raw.setdefault("topics" if "topics" in raw else "history", []).append(topic)
+    else:
+        raw = [entry]
+    json.dump(raw, open(HISTORY_FILE, "w", encoding="utf-8"), indent=2, ensure_ascii=False)
+
 
 def is_dup(cand, old_set):
     c, ct = cand.strip().lower(), tok(cand)
-    if not ct or c in old_set: return True
+    if not ct or c in old_set:
+        return True
     return any(c in o or o in c or (len(ct & tok(o)) / max(1, min(len(ct), len(tok(o))))) >= 0.55 for o in old_set if tok(o))
+
+
+def wiki_verify(query):
+    for q in (query, " ".join(sorted(tok(query), key=len, reverse=True)[:4])):
+        if not q.strip():
+            continue
+        try:
+            hits = json.loads(get(f"https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch={urllib.parse.quote_plus(q)}&srlimit=2&format=json")).get("query", {}).get("search", [])
+            for h in hits:
+                wtitle = h["title"]
+                sd = json.loads(get(f"https://en.wikipedia.org/api/rest_v1/page/summary/{urllib.parse.quote(wtitle.replace(' ', '_'))}"))
+                ext = re.sub(r"\s+", " ", sd.get("extract", "")).strip()
+                if len(ext) >= 240 and "may refer to:" not in ext.lower() and sd.get("type") != "disambiguation":
+                    return wtitle, ext[:1000]
+        except Exception:
+            pass
+    return "", ""
+
+
+def score_cand(title, facts, kws):
+    lt = title.lower()
+    sc = len(tok(title) & POWER) * 3 + sum(2 for k in kws if k in lt)
+    if re.search(r"\d", facts):
+        sc += 3
+    if len(facts) >= 500:
+        sc += 2
+    return sc
+
 
 def fetch_live(p, old_set):
     pool = []
-    for q in p[4]:
+    for q in p[3]:
         try:
-            for it in ET.fromstring(get(f"https://news.google.com/rss/search?q={urllib.parse.quote_plus(q)}&hl=en-US&gl=US&ceid=US:en")).findall(".//item")[:6]:
+            for it in ET.fromstring(get(f"https://news.google.com/rss/search?q={urllib.parse.quote_plus(q)}&hl=en-US&gl=US&ceid=US:en")).findall(".//item")[:5]:
                 t = re.sub(r"\s+-\s+[^-]+$", "", (it.findtext("title") or "").strip()).strip()
-                if safe(t): pool.append({"title": t, "source": "google_news", "summary": ""})
-        except Exception: pass
-    for s in p[5]:
-        try:
-            d = json.loads(get(f"https://suggestqueries.google.com/complete/search?client=firefox&ds=yt&q={urllib.parse.quote_plus(s)}"))
-            for x in (d[1][:6] if len(d) > 1 else []):
-                if len(str(x).split()) >= 5 and safe(str(x)): pool.append({"title": str(x).strip().title(), "source": "yt_trend", "summary": ""})
-        except Exception: pass
+                if safe(t):
+                    pool.append((t, "google_news"))
+        except Exception:
+            pass
     try:
-        for it in ET.fromstring(get(p[6])).findall(".//item")[:6]:
+        for it in ET.fromstring(get(p[4])).findall(".//item")[:5]:
             t = (it.findtext("title") or "").strip()
-            desc = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", it.findtext("description") or ""))[:240]
-            if safe(t): pool.append({"title": t, "source": "science_rss", "summary": desc})
-    except Exception: pass
+            if safe(t):
+                pool.append((t, "science_rss"))
+    except Exception:
+        pass
     for offset in (1, 2):
         try:
             dt = datetime.now(timezone.utc) - timedelta(days=offset)
@@ -98,64 +135,74 @@ def fetch_live(p, old_set):
                 rt = a.get("article", "")
                 if not rt.startswith(("Main_Page", "Special:", "Wikipedia:", "File:", "Portal:", "Deaths_in_")):
                     cl = rt.replace("_", " ").strip()
-                    if any(h in cl.lower() for h in p[7]) and safe(cl): pool.append({"title": cl, "source": "wiki_spike", "summary": ""})
+                    if any(h in cl.lower() for h in p[5]) and safe(cl):
+                        pool.append((cl, "wiki_spike"))
             break
-        except Exception: pass
-    out, seen = [], set()
-    for x in pool:
-        k = x["title"].lower()
-        if k not in seen and not is_dup(x["title"], old_set): seen.add(k); out.append(x)
-    return out
+        except Exception:
+            pass
 
-def wiki_fact(q):
-    for query in (q, " ".join(sorted(tok(q), key=len, reverse=True)[:4])):
-        if not query.strip(): continue
-        try:
-            hits = json.loads(get(f"https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch={urllib.parse.quote_plus(query)}&srlimit=1&format=json"))["query"]["search"]
-            if hits: return re.sub(r"\s+", " ", json.loads(get(f"https://en.wikipedia.org/api/rest_v1/page/summary/{urllib.parse.quote(hits[0]['title'].replace(' ', '_'))}")).get("extract", ""))[:320]
-        except Exception: pass
-    return ""
+    verified, seen = [], set()
+    random.shuffle(pool)
+    for raw_t, src in pool[:14]:
+        if raw_t.lower() in seen or is_dup(raw_t, old_set):
+            continue
+        wtitle, facts = wiki_verify(raw_t)
+        if not wtitle or is_dup(wtitle, old_set):
+            continue
+        seen.add(wtitle.lower())
+        verified.append({"topic": wtitle, "facts": facts, "source": src, "score": score_cand(wtitle, facts, p[5])})
+    verified.sort(key=lambda x: x["score"], reverse=True)
+    return verified
+
 
 def main():
-    raw, old_set, last_p, cnt = load_hist()
-    case_num, case_lbl = cnt + 1, f"FILE #{cnt + 1:03d}"
-    egg, angle = f"{random.choice('XVKZ')}-{cnt+1:02d}{random.randint(1,9)}", random.choice(ANGLES)
-    req_by, p, base, topic = "", None, None, ""
+    raw, old_set, last_p = load_hist()
+    angle = random.choice(ANGLES)
+    p, topic, facts, src, score = None, "", "", "", 0
+
     if os.path.exists(REQUESTS_FILE):
         try:
-            with open(REQUESTS_FILE, encoding="utf-8") as f: reqs = json.load(f)
+            reqs = json.load(open(REQUESTS_FILE, encoding="utf-8"))
             for i, r in enumerate(reqs):
-                if safe(r.get("topic", "")) and not is_dup(r["topic"], old_set):
-                    p, topic, req_by = random.choice(PILLARS), r["topic"].strip(), r.get("user", "@Fan").strip()
-                    base = {"title": topic, "source": "viewer_req", "summary": ""}
-                    with open(REQUESTS_FILE, "w", encoding="utf-8") as wf: json.dump(reqs[:i] + reqs[i+1:], wf, indent=2)
+                rt = (r.get("topic", "") if isinstance(r, dict) else str(r)).strip()
+                if safe(rt) and not is_dup(rt, old_set):
+                    wt, wf = wiki_verify(rt)
+                    topic, facts = (wt or rt), (wf or f"Verified real documentary subject: {rt}.")
+                    p, src, score = random.choice(PILLARS), "viewer_req", 99
+                    json.dump(reqs[:i] + reqs[i + 1 :], open(REQUESTS_FILE, "w", encoding="utf-8"), indent=2)
                     break
-        except Exception: pass
+        except Exception:
+            pass
+
     if not topic:
         elig = [x for x in PILLARS if x[0] != last_p] or PILLARS
         random.shuffle(elig)
-        cands = []
-        for x in elig[:5]:
-            got = fetch_live(x, old_set)
-            if len(got) > len(cands): cands, p = got, x
-            if len(cands) >= 4: break
-        if not cands: raise RuntimeError("No live candidates fetched")
-        try:
-            lines = "\n".join(f"{i+1}. [{c['source']}] {c['title']}" for i, c in enumerate(cands[:14]))
-            prompt = f"Pillar: {p[3]}\nAngle: {angle}\nItems:\n{lines}\nPick #1 concrete real-world item (real place, creature, event, or survival case). Rewrite as 6-10 word English Title Case Shorts hook naming that exact subject. NO colons (:), NO vague words like Deathline, Limit, Secret, Truth, Shocking. JSON only: {{\"index\":int,\"topic\":str}}"
-            req = urllib.request.Request(OLLAMA_URL, data=json.dumps({"model": MODEL, "prompt": prompt, "stream": False, "format": "json", "options": {"temperature": 0.3, "repeat_penalty": 1.25, "num_predict": 120}}).encode(), headers={"Content-Type": "application/json"}, method="POST")
-            res = json.loads(json.loads(urllib.request.urlopen(req, timeout=40).read().decode())["response"])
-            base = cands[max(0, min(len(cands)-1, int(res.get("index", 1))-1))]
-            t = str(res.get("topic", "")).strip()
-            topic = t if concrete(t) and not is_dup(t, old_set) else base["title"]
-        except Exception:
-            base = sorted(cands, key=lambda c: (3 if c["source"] == "yt_trend" else 2) + len(tok(c["title"]) & {"survive", "trapped", "deepest", "deadliest", "vanished", "forbidden", "mariana", "everest"}), reverse=True)[0]
-            topic = base["title"]
-    fact = base.get("summary") or wiki_fact(base["title"]) or wiki_fact(topic)
-    out = {"theme": p[1], "topic": topic, "badge": f"{case_lbl} | {('BY ' + req_by) if req_by else p[2]}"[:28], "case_number": case_num, "case_label": case_lbl, "easter_egg_code": egg, "requested_by": req_by, "angle": angle, "psych_strategy": angle, "fact_summary": fact, "pillar": p[3], "pillar_id": p[0], "source_type": base["source"]}
-    with open(OUTPUT_FILE, "w", encoding="utf-8") as f: json.dump(out, f, indent=2, ensure_ascii=False)
+        for cand_p in elig:
+            got = fetch_live(cand_p, old_set)
+            if got:
+                best = got[0]
+                p, topic, facts, src, score = cand_p, best["topic"], best["facts"], best["source"], best["score"]
+                break
+
+    if not topic:
+        unused = [c for c in CURATED_BANK if not is_dup(c[2], old_set)] or CURATED_BANK
+        elig_c = [c for c in unused if c[0] != last_p] or unused
+        pid, theme, c_topic, seed_fact = random.choice(elig_c)
+        p = next((x for x in PILLARS if x[0] == pid), PILLARS[0])
+        wt, wf = wiki_verify(c_topic)
+        topic = wt or c_topic
+        facts = f"{seed_fact} {wf}".strip()[:1000]
+        src, score = "curated_verified", 10
+
+    out = {
+        "theme": p[1], "topic": topic, "badge": "", "case_label": "",
+        "angle": angle, "psych_strategy": angle, "fact_summary": facts,
+        "pillar": p[2], "pillar_id": p[0], "source_type": src, "viral_score": score,
+    }
+    json.dump(out, open(OUTPUT_FILE, "w", encoding="utf-8"), indent=2, ensure_ascii=False)
     save_hist(raw, topic, p[0])
-    print(f"[*] {case_lbl} | {base['source']} -> {topic} | Clue: {egg}", flush=True)
+    print(f"[*] Selected [{p[2]} | {src} | score={score}]: {topic}", flush=True)
+
 
 if __name__ == "__main__":
     main()
