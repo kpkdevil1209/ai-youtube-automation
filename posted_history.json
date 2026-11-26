@@ -121,5 +121,10 @@
     "topic": "Submarine finds world’s deepest explosive volcanic activity in Mariana trench",
     "pillar_id": "deep_ocean",
     "ts": "2026-11-25T06:42:12.405394+00:00"
+  },
+  {
+    "topic": "Environmental conditions of South Korea",
+    "pillar_id": "earth_anomalies",
+    "ts": "2026-11-26T02:31:53.970467+00:00"
   }
 ]

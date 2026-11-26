@@ -1,15 +1,13 @@
 {
-  "theme": "OCEAN",
-  "topic": "Submarine finds world’s deepest explosive volcanic activity in Mariana trench",
-  "badge": "FILE #026 | ABYSS DEPTH",
-  "case_number": 26,
-  "case_label": "FILE #026",
-  "easter_egg_code": "V-266",
-  "requested_by": "",
-  "angle": "THE_SEALED_MYSTERY: Why experts locked it down and left.",
-  "psych_strategy": "THE_SEALED_MYSTERY: Why experts locked it down and left.",
-  "fact_summary": "The Pacific Ocean evolved in the Mesozoic from the Panthalassic Ocean, which had formed when Rodinia rifted apart around 750 Ma. The first ocean floor which is part of the current Pacific plate began 160 Ma to the west of the central Pacific and subsequently developed into the largest oceanic plate on Earth.",
-  "pillar": "Deep Ocean",
-  "pillar_id": "deep_ocean",
-  "source_type": "google_news"
+  "theme": "EARTH",
+  "topic": "Environmental conditions of South Korea",
+  "badge": "",
+  "case_label": "",
+  "angle": "START_WITH_IMPOSSIBLE_NUMBER: Open immediately with the extreme depth, year, or measurement that breaks expectation.",
+  "psych_strategy": "START_WITH_IMPOSSIBLE_NUMBER: Open immediately with the extreme depth, year, or measurement that breaks expectation.",
+  "fact_summary": "In regards to environmental pollution, South Korea has the highest level among the 38 OECD countries. With a population density of 492 people per square kilometer, it ranks third in the world, with more than half of the population living in the Seoul metropolitan area, which accounts for 11.8% of the land area. Therefore, since the population density of the metropolitan area is 4,169, the environmental pollution problem has a characteristic proportional to the population, so it is natural that the environmental pollution level is high. In addition, it is calculated that urban land will take 3,838 km over the next 20 years, and 65 times the area of Yeouido will be developed as a residential or industrial complex every year. Accordingly, the forest area is decreasing by 78 km, and the tidal flat by 36 km every year, indicating how serious the environmental damage in Korea is.",
+  "pillar": "Extreme Earth Anomalies",
+  "pillar_id": "earth_anomalies",
+  "source_type": "science_rss",
+  "viral_score": 5
 }
