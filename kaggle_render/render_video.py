@@ -97,10 +97,16 @@ def stage2_audio():
     shutil.rmtree(venv, ignore_errors=True)
     sh([uv, "venv", "--python", "3.11", venv])
     py, cu = f"{venv}/bin/python", "https://download.pytorch.org/whl/cu124"
+    sh([uv, "pip", "install", "--python", py, "numpy>=1.24.0,<2.0.0", "setuptools<82", "wheel"])
     sh([uv, "pip", "install", "--python", py, "torch==2.6.0", "torchaudio==2.6.0", "--index-url", cu])
-    sh([uv, "pip", "install", "--python", py, "--extra-index-url", cu, "setuptools<82", "chatterbox-tts", "soundfile", "numpy", "edge-tts"])
+    if subprocess.run([uv, "pip", "install", "--python", py, "--no-build-isolation", "chatterbox-tts", "soundfile", "edge-tts"]).returncode != 0:
+        sh([uv, "pip", "install", "--python", py, "--no-deps", "chatterbox-tts"])
+        sh([uv, "pip", "install", "--python", py, "numpy>=1.24.0,<2.0.0", "transformers==4.46.3", "diffusers==0.29.0", "safetensors==0.5.3", "conformer==0.3.2", "s3tokenizer", "librosa==0.11.0", "omegaconf", "pyloudnorm", "resemble-perth", "pykakasi", "soundfile", "edge-tts"])
     cb = "\n".join([
-        "import os, re, json, asyncio, random, subprocess, numpy as np, soundfile as sf, perth",
+        "import os, sys, types, re, json, asyncio, random, subprocess",
+        "os.environ['TRANSFORMERS_ATTN_IMPLEMENTATION'] = 'eager'",
+        "for _m in ('spacy_pkuseg', 'gradio'): sys.modules.setdefault(_m, types.ModuleType(_m))",
+        "import numpy as np, soundfile as sf, perth",
         "if getattr(perth, 'PerthImplicitWatermarker', None) is None:",
         "    class _W: apply_watermark = lambda self, w, sample_rate=24000: w",
         "    perth.PerthImplicitWatermarker = _W",
