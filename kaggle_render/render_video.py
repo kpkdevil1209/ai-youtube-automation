@@ -11,7 +11,7 @@ TOPICS = [
     "Why deep sea divers hear strange metallic knocking sounds",
     "The silent 1962 survival trick that saved a trapped miner",
     "Why modern skyscrapers sway on purpose during storms",
-    "How one tiny screw mistake caused a hidden vault to lock forever",
+    "How one tiny screw mistake locked an entire vault forever",
     "Why astronauts lose their sense of up and down in dark rooms",
 ]
 
@@ -46,7 +46,9 @@ def stage1_script():
     )
     for _ in range(30):
         try:
-            r = urllib.request.urlopen("http://127.0.0.1:11434/api/tags", timeout=2)
+            r = urllib.request.urlopen(
+                "http://127.0.0.1:11434/api/tags", timeout=2
+            )
             if r.status == 200:
                 break
         except Exception:
@@ -54,60 +56,87 @@ def stage1_script():
     sh(["ollama", "pull", "qwen2.5:14b"], env=env, quiet=True)
     topic = random.choice(TOPICS)
     prompt = (
-        "Return strict JSON only with keys: topic, title, hook, "
-        "description, tags, script, visual_prompts. "
+        "Return JSON with keys: topic, title, hook, description, "
+        "tags, script, visual_prompts. "
         f"Topic: {topic}. "
-        "Rules: script must be 34 to 39 words of fast 5th-grade "
-        "mystery storytelling with an immediate 2-second hook and "
-        "a shocking ending twist. hook must be 3 to 5 uppercase words. "
-        "title must be intriguing and max 52 chars without hashtags. "
-        "tags must be 5 lowercase strings. "
-        "visual_prompts must be a list of exactly 10 vivid 3D CGI "
-        "diorama scene descriptions with strong lighting and motion, "
-        "matching the story beat by beat. Never include prompt words."
+        "Keep script short: 3 punchy sentences (30 to 40 words total), "
+        "instant 2-second hook and shocking twist at the end. "
+        "hook: 3 to 5 uppercase words. "
+        "title: intriguing, max 50 chars, no hashtags. "
+        "tags: 5 lowercase strings. "
+        "visual_prompts: list of 10 short 3D CGI scene strings."
     )
-    data = None
-    for _ in range(4):
+    best = None
+    for k in range(3):
         body = json.dumps({
             "model": "qwen2.5:14b",
             "prompt": prompt,
             "stream": False,
             "format": "json",
-            "options": {"temperature": 0.75},
+            "options": {"temperature": 0.7},
         }).encode()
         req = urllib.request.Request(
             "http://127.0.0.1:11434/api/generate",
             data=body,
             headers={"Content-Type": "application/json"},
         )
-        res = json.loads(urllib.request.urlopen(req, timeout=180).read())
-        cand = json.loads(res["response"])
-        txt = " ".join([
-            str(cand.get("title", "")),
-            str(cand.get("script", "")),
-            str(cand.get("hook", "")),
-            str(cand.get("description", "")),
-        ])
-        vp = cand.get("visual_prompts", [])
-        wc = len(str(cand.get("script", "")).split())
-        if not LEAK_RE.search(txt) and len(vp) >= 8 and 26 <= wc <= 46:
-            data = cand
-            break
-    if not data:
+        try:
+            raw = json.loads(
+                urllib.request.urlopen(req, timeout=180).read()
+            )["response"]
+            m = re.search(r"\{.*\}", raw, re.S)
+            if not m:
+                continue
+            cand = json.loads(m.group(0))
+        except Exception as e:
+            print(f"S1 parse err {k}: {e}")
+            continue
+        scr = str(cand.get("script", "")).strip()
+        scr = re.sub(r"\band that is why\b", "that is how", scr, flags=re.I)
+        scr = re.sub(r"\s+", " ", scr)
+        cand["script"] = scr
+        vp = cand.get("visual_prompts") or []
+        vp = [
+            x.get("prompt") or x.get("description") or str(x)
+            if isinstance(x, dict) else str(x)
+            for x in vp if x
+        ]
+        cand["visual_prompts"] = vp
+        wc = len(scr.split())
+        print(f"S1 try {k}: wc={wc} vp={len(vp)}")
+        if wc >= 15 and len(vp) >= 3:
+            best = cand
+            if 24 <= wc <= 46 and len(vp) >= 8:
+                break
+    if not best:
         raise RuntimeError("Stage 1 script validation failed")
-    vp = list(data["visual_prompts"])[:10]
+    words = best["script"].split()
+    if len(words) > 42:
+        cut = " ".join(words[:42])
+        p_idx = cut.rfind(".")
+        best["script"] = (
+            cut[:p_idx + 1] if p_idx > 90 else cut.rstrip(".") + "."
+        )
+    vp = best["visual_prompts"][:10]
+    angs = ["wide angle ", "close-up ", "dramatic overhead ", "low angle "]
+    idx = 0
     while len(vp) < 10:
-        vp.append(vp[-1])
-    data["visual_prompts"] = vp
-    data["topic"] = str(data.get("topic") or topic)[:80]
-    data["title"] = str(data["title"]).replace("#", "").strip()[:58]
-    data["hook"] = str(data.get("hook") or "WAIT FOR THE END").upper()[:36]
+        vp.append(angs[idx % 4] + vp[idx % len(vp)])
+        idx += 1
+    best["visual_prompts"] = vp
+    best["topic"] = str(best.get("topic") or topic)[:80]
+    t = re.sub(LEAK_RE, "", str(best.get("title") or topic))
+    best["title"] = t.replace("#", "").strip()[:58] or topic[:58]
+    hk = str(best.get("hook") or "WAIT FOR THE END").upper()[:36]
+    best["hook"] = re.sub(r"[{}\r\n]", "", hk)
+    if not isinstance(best.get("tags"), list) or not best["tags"]:
+        best["tags"] = ["shorts", "science", "mystery", "facts", "3d"]
     srv.terminate()
     srv.wait()
     shutil.rmtree("/root/.ollama", ignore_errors=True)
     with open(f"{OUT}/current_script.json", "w") as f:
-        json.dump(data, f, indent=2)
-    return data
+        json.dump(best, f, indent=2)
+    return best
 
 
 def stage2_audio(sc):
@@ -175,19 +204,25 @@ def stage2_audio(sc):
         "-af", "silenceremove=start_periods=1:start_threshold=-42dB",
         "/tmp/voice_trim.wav",
     ], quiet=True)
-    p = subprocess.check_output([
+    src = "/tmp/voice_trim.wav"
+    d = float(subprocess.check_output([
         "ffprobe", "-v", "error", "-show_entries", "format=duration",
-        "-of", "default=noprint_wrappers=1:nokey=1", "/tmp/voice_trim.wav",
-    ]).decode().strip()
-    d = float(p)
+        "-of", "default=noprint_wrappers=1:nokey=1", src,
+    ]).decode().strip())
+    if d < 2.0:
+        src = "/tmp/voice_raw.wav"
+        d = float(subprocess.check_output([
+            "ffprobe", "-v", "error", "-show_entries", "format=duration",
+            "-of", "default=noprint_wrappers=1:nokey=1", src,
+        ]).decode().strip())
     tgt = round(random.uniform(14.15, 15.85), 2)
     if 13.95 <= d <= 15.95:
-        sh(["cp", "/tmp/voice_trim.wav", "/tmp/voice.wav"])
+        sh(["cp", src, "/tmp/voice.wav"])
         dur = d
     else:
         spd = max(0.80, min(1.30, d / tgt))
         sh([
-            "ffmpeg", "-y", "-i", "/tmp/voice_trim.wav",
+            "ffmpeg", "-y", "-i", src,
             "-af", f"atempo={spd:.4f}", "/tmp/voice.wav",
         ], quiet=True)
         dur = float(subprocess.check_output([
@@ -310,8 +345,7 @@ def stage3_wan(sc, meta):
         f.write("\n".join(w_lines))
 
     gpus = subprocess.check_output(["nvidia-smi", "-L"]).decode().splitlines()
-    ng = len(gpus)
-    if ng >= 2:
+    if len(gpus) >= 2:
         e0, e1 = os.environ.copy(), os.environ.copy()
         e0["CUDA_VISIBLE_DEVICES"] = "0"
         e1["CUDA_VISIBLE_DEVICES"] = "1"
