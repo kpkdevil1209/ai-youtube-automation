@@ -1,240 +1,418 @@
-import os, sys, re, json, time, glob, shutil, random, subprocess
-from pathlib import Path
+import os, re, gc, json, time, shutil, random, subprocess, urllib.request
 
-os.environ["HF_HOME"], os.environ["TOKENIZERS_PARALLELISM"] = "/tmp/hf_cache", "false"
-WORK = Path("/kaggle/working")
-WORK.mkdir(parents=True, exist_ok=True)
-SCRIPT_OUT, AUDIO_OUT = WORK / "current_script.json", Path("/tmp/final_audio.wav")
-META_OUT, FINAL_OUT = WORK / "beat_meta.json", WORK / "final_output.mp4"
+OUT = "/kaggle/working"
 LEAK_RE = re.compile(
-    r"(under\s*\d+\s*chars?|characters?|clicky\s*title|file\s*#?\d*|"
-    r"#shorts?|hook_banner|pinned_question|title:|icy\s*cola|and\s+that\s+is\s+why)", re.I
+    r"(under \d+ chars|file #|icy cola|and that is why)", re.I
 )
+TOPICS = [
+    "Why airplane windows have a tiny pinhole near the bottom",
+    "The 1986 balloon launch disaster that paralyzed Cleveland",
+    "What happens inside your body if you swallow a magnet",
+    "Why deep sea divers hear strange metallic knocking sounds",
+    "The silent 1962 survival trick that saved a trapped miner",
+    "Why modern skyscrapers sway on purpose during storms",
+    "How one tiny screw mistake caused a hidden vault to lock forever",
+    "Why astronauts lose their sense of up and down in dark rooms",
+]
 
-def sh(cmd, env=None):
-    return subprocess.run(cmd, shell=isinstance(cmd, str), env=env, check=True)
 
-def find_in(name):
-    hits = glob.glob(f"/kaggle/input/**/{name}", recursive=True)
-    return hits[0] if hits else (name if os.path.exists(name) else None)
+def sh(cmd, env=None, quiet=False):
+    kw = {"shell": isinstance(cmd, str), "env": env, "check": True}
+    if quiet:
+        kw["stdout"] = subprocess.DEVNULL
+        kw["stderr"] = subprocess.DEVNULL
+    return subprocess.run(cmd, **kw)
 
-def clean_title(raw, fb):
-    t = re.sub(r"\s+", " ", LEAK_RE.sub("", str(raw or "")).strip(" -:|\"'()[]")).strip()
-    if 10 <= len(t) <= 48: return t
-    ws = [w for w in re.findall(r"[A-Za-z0-9'-]+", fb) if len(w) > 1][:5]
-    return ("Why " + " ".join(ws) + " Stuns Experts")[:48]
-
-def bad_script(d):
-    if not isinstance(d, dict): return "not dict"
-    t, b = str(d.get("title", "")), str(d.get("hook_banner", ""))
-    ls, ss = d.get("lines") or [], d.get("shots") or []
-    if LEAK_RE.search(t) or LEAK_RE.search(b) or not (8 <= len(t) <= 48): return "title"
-    if not (2 <= len(b.split()) <= 6) or len(ls) != 5 or len(ss) != 10: return "counts"
-    tot, seen = 0, set()
-    for i, x in enumerate(ls):
-        s = str(x).strip(); ws = s.split()
-        if LEAK_RE.search(s) or not s.endswith((".", "?", "!")) or not (4 <= len(ws) <= 12):
-            return f"line {i+1}"
-        if any(len(w) > 16 for w in ws): return f"word {i+1}"
-        k = re.sub(r"[^a-z]", "", s.lower())
-        if k in seen: return "dup"
-        seen.add(k); tot += len(ws)
-    if not (30 <= tot <= 46) or any(len(str(x).split()) < 8 for x in ss): return "len"
-    return ""
 
 def stage1_script():
-    import requests
-    tp = find_in("trending_topic.json")
-    td = json.load(open(tp, encoding="utf-8")) if tp else {}
-    topic = td.get("topic") or "Kola Superdeep Borehole"
-    fb = "At 12,262 meters underground in Russia, rock flowed like plastic at 180C."
-    facts = re.sub(r"\s+", " ", td.get("fact_summary") or fb).strip()[:1400]
-    tdur = round(random.uniform(14.15, 15.85), 2)
-    sh("apt-get update -qq && apt-get install -y -qq zstd ffmpeg >/dev/null")
-    sh("curl -fsSL https://ollama.com/download/ollama-linux-amd64.tar.zst | zstd -d -c | tar -x -C /usr")
-    env = {**os.environ, "OLLAMA_MODELS": "/tmp/olm", "OLLAMA_HOST": "127.0.0.1:11434", "CUDA_VISIBLE_DEVICES": "0"}
-    srv = subprocess.Popen(["ollama", "serve"], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    for _ in range(25):
+    if not shutil.which("ollama"):
+        sh(
+            "which zstd >/dev/null || "
+            "(apt-get update -qq && apt-get install -y -qq zstd)"
+        )
+        sh(
+            "curl -fsSL https://ollama.com/download/"
+            "ollama-linux-amd64.tar.zst -o /tmp/olm.zst"
+        )
+        sh("zstd -d -c /tmp/olm.zst | tar -x -C /usr")
+        sh("rm -f /tmp/olm.zst")
+    env = os.environ.copy()
+    env["CUDA_VISIBLE_DEVICES"] = "0"
+    srv = subprocess.Popen(
+        ["ollama", "serve"],
+        env=env,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    for _ in range(30):
         try:
-            if requests.get("http://127.0.0.1:11434/api/tags", timeout=2).status_code == 200: break
-        except Exception: time.sleep(1)
-    for r in range(3):
-        try: sh(["ollama", "pull", "qwen2.5:14b"], env=env); break
+            r = urllib.request.urlopen("http://127.0.0.1:11434/api/tags", timeout=2)
+            if r.status == 200:
+                break
         except Exception:
-            if r == 2: raise
-            time.sleep(5)
-    def ask(pr, fmt=None, temp=0.65):
-        p = {"model": "qwen2.5:14b", "messages": [{"role": "user", "content": pr}], "stream": False, "options": {"temperature": temp, "num_ctx": 4096}}
-        if fmt: p["format"] = fmt
-        res = requests.post("http://127.0.0.1:11434/api/chat", json=p, timeout=180)
-        res.raise_for_status()
-        return res.json()["message"]["content"]
-    arc = ask(f"Facts on '{topic}': {facts}\nWrite 3 ultra-short lines:\n1. CONTRADICTION HOOK (max 8 words, no answer)\n2. FALSE ASSUMPTION (max 9 words)\n3. SHOCKING TWIST & LOOP TO HOOK (max 12 words)", temp=0.7)
-    arr_s, str_s = {"type": "array", "items": {"type": "string"}}, {"type": "string"}
-    sch = {"type": "object", "properties": {"title": str_s, "hook_banner": str_s, "lines": arr_s, "shots": arr_s, "pinned_question": str_s, "description": str_s, "tags": arr_s}, "required": ["title", "hook_banner", "lines", "shots", "pinned_question", "description", "tags"]}
-    best, err = None, ""
+            time.sleep(1)
+    sh(["ollama", "pull", "qwen2.5:14b"], env=env, quiet=True)
+    topic = random.choice(TOPICS)
+    prompt = (
+        "Return strict JSON only with keys: topic, title, hook, "
+        "description, tags, script, visual_prompts. "
+        f"Topic: {topic}. "
+        "Rules: script must be 34 to 39 words of fast 5th-grade "
+        "mystery storytelling with an immediate 2-second hook and "
+        "a shocking ending twist. hook must be 3 to 5 uppercase words. "
+        "title must be intriguing and max 52 chars without hashtags. "
+        "tags must be 5 lowercase strings. "
+        "visual_prompts must be a list of exactly 10 vivid 3D CGI "
+        "diorama scene descriptions with strong lighting and motion, "
+        "matching the story beat by beat. Never include prompt words."
+    )
+    data = None
     for _ in range(4):
+        body = json.dumps({
+            "model": "qwen2.5:14b",
+            "prompt": prompt,
+            "stream": False,
+            "format": "json",
+            "options": {"temperature": 0.75},
+        }).encode()
+        req = urllib.request.Request(
+            "http://127.0.0.1:11434/api/generate",
+            data=body,
+            headers={"Content-Type": "application/json"},
+        )
+        res = json.loads(urllib.request.urlopen(req, timeout=180).read())
+        cand = json.loads(res["response"])
+        txt = " ".join([
+            str(cand.get("title", "")),
+            str(cand.get("script", "")),
+            str(cand.get("hook", "")),
+            str(cand.get("description", "")),
+        ])
+        vp = cand.get("visual_prompts", [])
+        wc = len(str(cand.get("script", "")).split())
+        if not LEAK_RE.search(txt) and len(vp) >= 8 and 26 <= wc <= 46:
+            data = cand
+            break
+    if not data:
+        raise RuntimeError("Stage 1 script validation failed")
+    vp = list(data["visual_prompts"])[:10]
+    while len(vp) < 10:
+        vp.append(vp[-1])
+    data["visual_prompts"] = vp
+    data["topic"] = str(data.get("topic") or topic)[:80]
+    data["title"] = str(data["title"]).replace("#", "").strip()[:58]
+    data["hook"] = str(data.get("hook") or "WAIT FOR THE END").upper()[:36]
+    srv.terminate()
+    srv.wait()
+    shutil.rmtree("/root/.ollama", ignore_errors=True)
+    with open(f"{OUT}/current_script.json", "w") as f:
+        json.dump(data, f, indent=2)
+    return data
+
+
+def stage2_audio(sc):
+    uv = shutil.which("uv") or "/root/.local/bin/uv"
+    if not os.path.exists(uv):
+        sh("curl -LsSf https://astral.sh/uv/install.sh | sh", quiet=True)
+    ve = "/tmp/cb_venv"
+    py = f"{ve}/bin/python"
+    if not os.path.exists(py):
+        sh([uv, "venv", ve, "--python", "3.11"], quiet=True)
+        sh([
+            uv, "pip", "install", "--python", py,
+            "numpy>=1.24.0,<2.0.0", "setuptools<82", "wheel",
+        ], quiet=True)
+        sh([
+            uv, "pip", "install", "--python", py,
+            "--index-url", "https://download.pytorch.org/whl/cu124",
+            "torch==2.6.0", "torchaudio==2.6.0",
+        ], quiet=True)
         try:
-            pr = f"Write 15s Short from:\nTOPIC:{topic}\nFACTS:{facts}\nARC:{arc}\n" + (f"FIX:{err}\n" if err else "") + "Rules (never leak rule words):\n- title: 20-42 letters curiosity title (no FILE # or chars)\n- hook_banner: 3-5 bold uppercase words\n- lines: EXACTLY 5 sentences, total 35-41 words, end with '.' or '?'. L1=shock hook, L2=clue, L3=false guess, L4=mind twist, L5=loop back to L1. Ban 'and that is why'.\n- shots: EXACTLY 10 distinct 9:16 35mm documentary prompts (12-18 words each, no text)\n- pinned_question (<95 chars), description (2 lines), tags (6)"
-            cand = json.loads(ask(pr, fmt=sch, temp=0.55))
-            cand["title"] = clean_title(cand.get("title", ""), topic)
-            cand["hook_banner"] = LEAK_RE.sub("", str(cand.get("hook_banner", ""))).strip().upper()[:42]
-            err = bad_script(cand)
-            if not err: best = cand; break
-            if best is None and len(cand.get("lines", [])) == 5 and len(cand.get("shots", [])) == 10: best = cand
-        except Exception as e: err = str(e)
-    srv.terminate(); shutil.rmtree("/tmp/olm", ignore_errors=True)
-    if best is None:
-        best = {"title": clean_title("", topic), "hook_banner": "SEALED 12KM DOWN", "lines": ["Why did engineers seal Earth's deepest hole?", "At twelve kilometers down, steel drills struck silence.", "Experts expected dry granite beneath the crust.", "Instead, hot rock flowed like liquid plastic.", "Nobody knows what pressure waits deeper below."], "shots": [f"Cinematic 35mm documentary shot {k+1} of {topic}, dark shadows, analog film grain, moody light" for k in range(10)], "pinned_question": "Would you go down if it reopened?", "description": facts[:260], "tags": ["mystery", "science", "unexplained", "facts"]}
-    best.update({"topic": topic, "target_dur": tdur})
-    json.dump(best, open(SCRIPT_OUT, "w", encoding="utf-8"), indent=2)
-    print("[Stage 1]", best["title"], "| target:", tdur)
-    return best
-
-def stage2_audio():
-    sh([sys.executable, "-m", "pip", "install", "-q", "uv"])
-    uv, venv = shutil.which("uv") or "uv", "/tmp/cb_venv"
-    shutil.rmtree(venv, ignore_errors=True)
-    sh([uv, "venv", "--python", "3.11", venv])
-    py, cu = f"{venv}/bin/python", "https://download.pytorch.org/whl/cu124"
-    sh([uv, "pip", "install", "--python", py, "numpy>=1.24.0,<2.0.0", "setuptools<82", "wheel"])
-    sh([uv, "pip", "install", "--python", py, "torch==2.6.0", "torchaudio==2.6.0", "--index-url", cu])
-    if subprocess.run([uv, "pip", "install", "--python", py, "--no-build-isolation", "chatterbox-tts", "soundfile", "edge-tts"]).returncode != 0:
-        sh([uv, "pip", "install", "--python", py, "--no-deps", "chatterbox-tts"])
-        sh([uv, "pip", "install", "--python", py, "numpy>=1.24.0,<2.0.0", "transformers==4.46.3", "diffusers==0.29.0", "safetensors==0.5.3", "conformer==0.3.2", "s3tokenizer", "librosa==0.11.0", "omegaconf", "pyloudnorm", "resemble-perth", "pykakasi", "soundfile", "edge-tts"])
-    cb = "\n".join([
-        "import os, sys, types, re, json, asyncio, random, subprocess",
+            sh([
+                uv, "pip", "install", "--python", py,
+                "--no-build-isolation",
+                "chatterbox-tts", "soundfile", "edge-tts",
+            ], quiet=True)
+        except Exception:
+            sh([
+                uv, "pip", "install", "--python", py, "--no-deps",
+                "chatterbox-tts",
+            ], quiet=True)
+            sh([
+                uv, "pip", "install", "--python", py,
+                "transformers==4.46.3", "diffusers==0.29.0",
+                "conformer==0.3.2", "s3tokenizer", "librosa==0.11.0",
+                "pyloudnorm", "resemble-perth", "omegaconf", "einops",
+                "safetensors", "huggingface_hub", "soundfile",
+                "scipy", "edge-tts",
+            ], quiet=True)
+    cb_lines = [
+        "import os, sys, types, soundfile as sf",
         "os.environ['TRANSFORMERS_ATTN_IMPLEMENTATION'] = 'eager'",
-        "for _m in ('spacy_pkuseg', 'gradio'): sys.modules.setdefault(_m, types.ModuleType(_m))",
-        "import numpy as np, soundfile as sf, perth",
+        "for n in ('spacy_pkuseg', 'gradio'):",
+        "    if n not in sys.modules:",
+        "        m = types.ModuleType(n)",
+        "        m.pkuseg = lambda *a, **k: None",
+        "        sys.modules[n] = m",
+        "import perth",
         "if getattr(perth, 'PerthImplicitWatermarker', None) is None:",
-        "    class _W: apply_watermark = lambda self, w, sample_rate=24000: w",
-        "    perth.PerthImplicitWatermarker = _W",
+        "    class _P:",
+        "        def apply_watermark(self, w, **k): return w",
+        "    perth.PerthImplicitWatermarker = _P",
         "from chatterbox.tts import ChatterboxTTS",
-        "SR = 24000; d = json.load(open('/kaggle/working/current_script.json'))",
-        "lines, td = d['lines'], float(d.get('target_dur', 15.0))",
-        "m = ChatterboxTTS.from_pretrained(device='cuda')",
-        "trim = lambda y: y if not len(np.where(np.abs(y)>0.008)[0]) else y[max(0,np.where(np.abs(y)>0.008)[0][0]-600):min(len(y),np.where(np.abs(y)>0.008)[0][-1]+1080)]",
-        "async def efb(t, p): import edge_tts; await edge_tts.Communicate(t, 'en-US-AndrewMultilingualNeural', rate='+8%').save(p)",
-        "cfgs, gaps, segs = [(0.68,0.4),(0.56,0.45),(0.6,0.42),(0.72,0.38),(0.62,0.42)], [0.12,0.09,0.16,0.1,0.0], []",
-        "for i, txt in enumerate(lines):",
-        r"    cl = re.sub(r'\s+', ' ', txt).strip(); cl = cl if cl.endswith(('.','?','!')) else cl+'.'",
-        "    ex, cfg = cfgs[i]; ch = None",
-        "    for _ in range(2):",
-        "        a = trim(m.generate(text=cl, exaggeration=ex, cfg_weight=cfg, temperature=0.74, repetition_penalty=1.22).squeeze().detach().cpu().numpy().astype(np.float32))",
-        "        if 0.8 <= len(a)/SR <= 5.2 and float(np.sqrt(np.mean(a**2))) > 0.008: ch = a; break",
-        "    if ch is None:",
-        "        asyncio.run(efb(cl, f'/tmp/f{i}.mp3')); subprocess.run(['ffmpeg','-y','-i',f'/tmp/f{i}.mp3','-ar',str(SR),'-ac','1',f'/tmp/f{i}.wav'], check=True)",
-        "        ch, _ = sf.read(f'/tmp/f{i}.wav', dtype='float32'); ch = trim(ch)",
-        "    segs.append(ch * (0.88 / (float(np.max(np.abs(ch))) or 1.0)))",
-        "parts, rt, cur = [], [], 0.0",
-        "for i, a in enumerate(segs):",
-        "    du = len(a)/SR; rt.append({'text': lines[i], 'start': cur, 'end': cur+du}); parts.append(a); cur += du",
-        "    if gaps[i] > 0: parts.append(np.zeros(int(SR*gaps[i]), np.float32)); cur += gaps[i]",
-        "sf.write('/tmp/vr.wav', np.concatenate(parts), SR); rdur = sum(len(x) for x in parts)/SR",
-        "tp = min(1.16, max(0.92, rdur/td)) if (rdur > 15.85 or rdur < 13.85) else 1.0",
-        "af = f'atempo={tp:.4f},highpass=f=75,equalizer=f=145:width_type=o:width=1.4:g=2.5,equalizer=f=4800:width_type=o:width=1.4:g=1.5'",
-        "subprocess.run(['ffmpeg','-y','-i','/tmp/vr.wav','-af',af,'-ar','48000','-ac','1','/tmp/veq.wav'], check=True)",
-        "veq, sr48 = sf.read('/tmp/veq.wav', dtype='float32'); vdur = len(veq)/sr48",
-        "fdur = max(14.05, min(15.95, max(vdur + 0.12, td)))",
-        "veq = np.concatenate([veq, np.zeros(int((fdur-vdur)*sr48), np.float32)]) if vdur < fdur else veq[:int(fdur*sr48)]",
-        "fdur = len(veq)/sr48; sc = 1.0/tp; timings = [{'text': x['text'], 'start': round(x['start']*sc,3), 'end': round(x['end']*sc,3)} for x in rt]",
-        "cuts = [random.uniform(1.32, 1.68) for _ in range(10)]; cs = sum(cuts); cuts = [round(c*fdur/cs, 3) for c in cuts]; cuts[-1] = round(cuts[-1] + fdur - sum(cuts), 3)",
-        "t = np.linspace(0, fdur, len(veq), endpoint=False, dtype=np.float32)",
-        "drone = (0.045*np.sin(2*np.pi*48*t) + 0.025*np.sin(2*np.pi*96*t)).astype(np.float32); sfx = np.zeros_like(veq); ct = 0.0",
-        "for cd in cuts[:-1]:",
-        "    ct += cd; p = int(ct*sr48); wl = int(0.18*sr48)",
-        "    if p + wl < len(sfx): wt = np.linspace(0,0.18,wl,dtype=np.float32); sfx[p:p+wl] += np.sin(np.pi*wt/0.18)*(0.06*np.random.randn(wl).astype(np.float32)*(0.4+wt*3)+0.12*np.sin(2*np.pi*(65-25*wt/0.18)*wt))",
-        "rp, rl = max(0, int((timings[3]['start']-0.55)*sr48)), int(0.55*sr48)",
-        "if rp + rl < len(sfx): rt2 = np.linspace(0,0.55,rl,dtype=np.float32); sfx[rp:rp+rl] += (rt2/0.55)**2 * 0.14 * np.sin(2*np.pi*(55+180*(rt2/0.55))*rt2)",
-        "sf.write('/tmp/mix.wav', np.clip(veq+drone+sfx, -0.98, 0.98), sr48)",
-        "subprocess.run(['ffmpeg','-y','-i','/tmp/mix.wav','-af','loudnorm=I=-14:TP=-1.5:LRA=7','-ar','48000','-ac','2','/tmp/final_audio.wav'], check=True)",
-        "ft = lambda s: f'{int(s//3600)}:{int((s%3600)//60):02d}:{s%60:05.2f}'",
-        "fh = 'Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding'",
-        "s1 = 'Style: Pop,DejaVu Sans,70,&H00FFFFFF,&H0000FFFF,&H00000000,&H80000000,-1,0,0,0,100,100,1,0,1,5,2,2,50,50,510,1'",
-        "s2 = 'Style: Accent,DejaVu Sans,74,&H0000E5FF,&H0000FFFF,&H00000000,&H80000000,-1,0,0,0,100,100,1,0,1,5,2,2,50,50,510,1'",
-        "ass = ['[Script Info]', 'ScriptType: v4.00+', 'PlayResX: 1080', 'PlayResY: 1920', '', '[V4+ Styles]', fh, s1, s2, '', '[Events]', 'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text']",
-        "for li, tm in enumerate(timings):",
-        "    ws = tm['text'].split(); chs = [' '.join(ws[k:k+2]) for k in range(0, len(ws), 2)]",
-        r"    wts = [max(2, len(re.sub(r'[^a-zA-Z]', '', c))) for c in chs]; wsum = sum(wts) or 1; sp = max(0.4, tm['end']-tm['start']); c0 = tm['start']",
-        "    for ci, ch in enumerate(chs):",
-        "        c1 = min(fdur-0.05, c0 + sp*wts[ci]/wsum); st = 'Accent' if li in (0,3) else 'Pop'",
-        r"        ass.append(f'Dialogue: 0,{ft(c0)},{ft(c1)},{st},,0,0,0,,' + r'{\fscx114\fscy114\t(0,75,\fscx100\fscy100)}' + ch.upper()); c0 = c1",
-        r"open('/tmp/subtitles.ass','w',encoding='utf-8').write('\n'.join(ass))",
-        "json.dump({'total_dur': round(fdur,3), 'cut_durs': cuts, 'timings': timings}, open('/kaggle/working/beat_meta.json','w'), indent=2)",
-        "print(f'[Stage 2] Chatterbox {fdur:.2f}s')",
-    ])
-    open("/tmp/cb.py", "w", encoding="utf-8").write(cb)
-    sh([py, "/tmp/cb.py"])
-    for p in (venv, "/root/.cache/huggingface", "/tmp/hf_cache"): shutil.rmtree(p, ignore_errors=True)
-    return json.load(open(META_OUT, encoding="utf-8"))
+        "txt = open('/tmp/tts_txt.txt').read().strip()",
+        "m = ChatterboxTTS.from_pretrained('cuda')",
+        "wav = m.generate(txt, exaggeration=0.55, cfg_weight=0.45)",
+        "sf.write('/tmp/voice_raw.wav', wav.squeeze().cpu().numpy(), m.sr)",
+    ]
+    with open("/tmp/tts_txt.txt", "w") as f:
+        f.write(sc["script"])
+    with open("/tmp/cb_run.py", "w") as f:
+        f.write("\n".join(cb_lines))
+    sh([py, "/tmp/cb_run.py"])
+    sh([
+        "ffmpeg", "-y", "-i", "/tmp/voice_raw.wav",
+        "-af", "silenceremove=start_periods=1:start_threshold=-42dB",
+        "/tmp/voice_trim.wav",
+    ], quiet=True)
+    p = subprocess.check_output([
+        "ffprobe", "-v", "error", "-show_entries", "format=duration",
+        "-of", "default=noprint_wrappers=1:nokey=1", "/tmp/voice_trim.wav",
+    ]).decode().strip()
+    d = float(p)
+    tgt = round(random.uniform(14.15, 15.85), 2)
+    if 13.95 <= d <= 15.95:
+        sh(["cp", "/tmp/voice_trim.wav", "/tmp/voice.wav"])
+        dur = d
+    else:
+        spd = max(0.80, min(1.30, d / tgt))
+        sh([
+            "ffmpeg", "-y", "-i", "/tmp/voice_trim.wav",
+            "-af", f"atempo={spd:.4f}", "/tmp/voice.wav",
+        ], quiet=True)
+        dur = float(subprocess.check_output([
+            "ffprobe", "-v", "error", "-show_entries", "format=duration",
+            "-of", "default=noprint_wrappers=1:nokey=1", "/tmp/voice.wav",
+        ]).decode().strip())
+    shutil.rmtree(ve, ignore_errors=True)
+    words = sc["script"].split()
+    cuts = [round(dur * i / 10.0, 3) for i in range(11)]
+    beats = []
+    wt = 0.0
+    step = dur / max(1, len(words))
+    for i in range(0, len(words), 2):
+        chunk = " ".join(words[i:i + 2])
+        end = min(dur, (i + 2) * step)
+        beats.append({"t": round(wt, 3), "e": round(end, 3), "w": chunk})
+        wt = end
+    meta = {"dur": round(dur, 3), "cuts": cuts, "beats": beats}
+    with open(f"{OUT}/beat_meta.json", "w") as f:
+        json.dump(meta, f, indent=2)
+    return meta
 
-def make_banner(text, outp):
-    from PIL import Image, ImageDraw, ImageFont
-    img = Image.new("RGBA", (1080, 260), (0, 0, 0, 0)); d = ImageDraw.Draw(img)
-    d.rounded_rectangle([60, 20, 1020, 240], radius=34, fill=(10, 14, 22, 215), outline=(255, 215, 0, 235), width=5)
-    fp = next((p for p in ["/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"] if os.path.exists(p)), None)
-    font = ImageFont.truetype(fp, 58) if fp else ImageFont.load_default()
-    lines, cur = [], ""
-    for w in text.split():
-        if len((cur + " " + w).strip()) > 20 and cur: lines.append(cur); cur = w
-        else: cur = (cur + " " + w).strip()
-    if cur: lines.append(cur)
-    lines = lines[:2]; y0 = 72 if len(lines) == 2 else 95
-    for i, ln in enumerate(lines):
-        tw = d.textbbox((0, 0), ln, font=font)[2]
-        d.text(((1080 - tw) // 2, y0 + i * 74), ln, font=font, fill=(255, 220, 40, 255) if i == 0 else (255, 255, 255, 255))
-    img.save(outp)
 
-def stage3_wan(sdata, meta):
-    chk = "import transformers,diffusers,peft,huggingface_hub; assert int(transformers.__version__.split('.')[0])<5"
-    if subprocess.run([sys.executable, "-c", chk], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode != 0:
-        sh([sys.executable, "-m", "pip", "install", "-q", "--no-cache-dir", "diffusers>=0.32.2", "transformers>=4.49.0,<5.0.0", "peft>=0.14.0", "accelerate>=1.2.0", "huggingface_hub>=0.28.0", "imageio-ffmpeg", "pillow"])
+def stage3_wan(sc, meta):
+    sh([
+        "pip", "install", "-q", "diffusers>=0.32.2",
+        "transformers>=4.49,<5", "accelerate", "ftfy",
+        "sentencepiece", "imageio[ffmpeg]",
+    ], quiet=True)
+    import torch
     from huggingface_hub import snapshot_download
-    snapshot_download("Wan-AI/Wan2.1-T2V-1.3B-Diffusers", local_dir="/tmp/wan_model")
-    open("/tmp/enc.py", "w").write("\n".join([
-        "import json, torch; from transformers import UMT5EncoderModel, AutoTokenizer",
-        "shots = json.load(open('/kaggle/working/current_script.json'))['shots']",
-        "tok = AutoTokenizer.from_pretrained('/tmp/wan_model', subfolder='tokenizer')",
-        "enc = UMT5EncoderModel.from_pretrained('/tmp/wan_model', subfolder='text_encoder', torch_dtype=torch.bfloat16).to('cuda:0').eval()",
-        "e = lambda t: (lambda x: enc(x.input_ids, attention_mask=x.attention_mask)[0].cpu())(tok([t], padding='max_length', max_length=226, truncation=True, return_tensors='pt').to('cuda:0'))",
-        "with torch.no_grad(): pos = [e(s + ', vertical 9:16, 35mm Kodak film, matte documentary, film grain, smooth motion') for s in shots]; neg = e('text, watermark, letters, blurry, distorted, plastic CGI, static')",
-        "torch.save({'pos': pos, 'neg': neg}, '/tmp/pe.pt')",
-    ]))
-    sh([sys.executable, "/tmp/enc.py"])
-    def worker(gpu, idxs):
-        open(f"/tmp/w{gpu}.py", "w").write("\n".join([
-            "import torch; from diffusers import WanPipeline, AutoencoderKLWan",
-            "from diffusers.schedulers.scheduling_unipc_multistep import UniPCMultistepScheduler",
-            "from diffusers.utils import export_to_video",
-            "pe = torch.load('/tmp/pe.pt', map_location='cpu', weights_only=False)",
-            "vae = AutoencoderKLWan.from_pretrained('/tmp/wan_model', subfolder='vae', torch_dtype=torch.float32)",
-            "pipe = WanPipeline.from_pretrained('/tmp/wan_model', vae=vae, text_encoder=None, tokenizer=None, torch_dtype=torch.float16)",
-            "pipe.scheduler.config.flow_shift = 3.0; pipe.scheduler = UniPCMultistepScheduler.from_config(pipe.scheduler.config)",
-            "pipe.enable_model_cpu_offload(); pipe.vae.enable_tiling(); pipe.vae.enable_slicing(); neg = pe['neg'].to(dtype=torch.float16)",
-            f"for i in {idxs}:",
-            "    out = pipe(prompt_embeds=pe['pos'][i].to(dtype=torch.float16), negative_prompt_embeds=neg, height=832, width=480, num_frames=25, num_inference_steps=20, guidance_scale=5.5, generator=torch.Generator('cpu').manual_seed(4200+i*17)).frames[0]",
-            "    export_to_video(out, f'/tmp/clip_{i}.mp4', fps=16); print(f'Done shot {i}', flush=True)",
-        ]))
-        return subprocess.Popen([sys.executable, f"/tmp/w{gpu}.py"], env={**os.environ, "CUDA_VISIBLE_DEVICES": str(gpu)}, stdout=open(f"/tmp/w{gpu}.log", "w"), stderr=subprocess.STDOUT)
-    ng = len(subprocess.check_output(["nvidia-smi", "-L"]).decode().strip().splitlines())
-    procs = [worker(0, [0,2,4,6,8]), worker(1, [1,3,5,7,9])] if ng >= 2 else [worker(0, list(range(10)))]
-    if any(p.wait() != 0 for p in procs):
-        for g in range(len(procs)): print(f"=== W{g} ===\n" + "\n".join(open(f"/tmp/w{g}.log").read().splitlines()[-35:]))
-        raise RuntimeError("GPU worker failed")
-    shutil.rmtree("/tmp/wan_model", ignore_errors=True); shutil.rmtree("/tmp/hf_cache", ignore_errors=True)
-    segs = []
-    for i, d in enumerate(meta["cut_durs"]):
-        seg, flp = f"/tmp/seg_{i}.mp4", (",hflip" if i % 2 else "")
-        vf = f"setpts={d/1.5625:.4f}*PTS,fps=30,scale='trunc(1080*(1+0.09*t/{d:.3f})/2)*2':'trunc(1920*(1+0.09*t/{d:.3f})/2)*2':eval=frame:flags=lanczos,crop=1080:1920{flp},noise=alls=7:allf=t,unsharp=5:5:0.75:5:5:0.0,eq=contrast=1.08:saturation=1.05:gamma=1.04"
-        sh(["ffmpeg", "-y", "-i", f"/tmp/clip_{i}.mp4", "-vf", vf, "-t", f"{d:.3f}", "-c:v", "libx264", "-preset", "fast", "-crf", "16", "-pix_fmt", "yuv420p", "-an", seg])
-        segs.append(seg)
-    open("/tmp/concat.txt", "w").write("\n".join(f"file '{s}'" for s in segs))
-    sh(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", "/tmp/concat.txt", "-c", "copy", "/tmp/vraw.mp4"])
-    make_banner(sdata.get("hook_banner", "UNEXPLAINED SIGNAL"), "/tmp/banner.png")
-    fc = "[0:v][1:v]overlay=0:200:enable='between(t,0,2.2)'[v1];[v1]ass=/tmp/subtitles.ass[vo]"
-    sh(["ffmpeg", "-y", "-i", "/tmp/vraw.mp4", "-i", "/tmp/banner.png", "-i", str(AUDIO_OUT), "-filter_complex", fc, "-map", "[vo]", "-map", "2:a", "-c:v", "libx264", "-preset", "medium", "-crf", "17", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k", "-shortest", "-movflags", "+faststart", str(FINAL_OUT)])
-    print("[Done]", FINAL_OUT)
+    from transformers import AutoTokenizer, UMT5EncoderModel
+    from diffusers import WanPipeline
+
+    mid = "Wan-AI/Wan2.1-T2V-1.3B-Diffusers"
+    snapshot_download(mid)
+    prompts = [
+        f"Stylized 3D Pixar-like CGI cinematic scene, dramatic "
+        f"volumetric lighting, dynamic camera motion: {p}"
+        for p in sc["visual_prompts"][:10]
+    ]
+    neg = (
+        "blurry, static, watermark, text, subtitle, distorted, "
+        "overexposed, low quality"
+    )
+    tok = AutoTokenizer.from_pretrained(mid, subfolder="tokenizer")
+    te = UMT5EncoderModel.from_pretrained(
+        mid, subfolder="text_encoder", torch_dtype=torch.bfloat16
+    ).to("cuda:0")
+    ep = WanPipeline(
+        tokenizer=tok, text_encoder=te,
+        vae=None, scheduler=None, transformer=None,
+    )
+    with torch.no_grad():
+        embs = [
+            tuple(x.cpu() for x in ep.encode_prompt(
+                p, neg, True, device="cuda:0"
+            ))
+            for p in prompts
+        ]
+    torch.save(embs, "/tmp/embs.pt")
+    del ep, te, tok, embs
+    gc.collect()
+    torch.cuda.empty_cache()
+
+    w_lines = [
+        "import sys, torch, torch.nn.functional as F",
+        "from diffusers import (",
+        "    AutoencoderKLWan, WanPipeline,",
+        "    WanTransformer3DModel, UniPCMultistepScheduler",
+        ")",
+        "from diffusers.utils import export_to_video",
+        "_sd = F.scaled_dot_product_attention",
+        "def _cs(q, k, v, attn_mask=None, dropout_p=0.0,",
+        "        is_causal=False, **kw):",
+        "    if attn_mask is not None or is_causal or q.shape[-2] <= 512:",
+        "        return _sd(q, k, v, attn_mask, dropout_p, is_causal, **kw)",
+        "    out = [",
+        "        _sd(q[..., i:i+512, :], k, v, None, dropout_p, False, **kw)",
+        "        for i in range(0, q.shape[-2], 512)",
+        "    ]",
+        "    return torch.cat(out, dim=-2)",
+        "F.scaled_dot_product_attention = _cs",
+        "mid = 'Wan-AI/Wan2.1-T2V-1.3B-Diffusers'",
+        "vae = AutoencoderKLWan.from_pretrained(",
+        "    mid, subfolder='vae', torch_dtype=torch.float32",
+        ")",
+        "tr = WanTransformer3DModel.from_pretrained(",
+        "    mid, subfolder='transformer', torch_dtype=torch.bfloat16",
+        ")",
+        "sch = UniPCMultistepScheduler.from_pretrained(",
+        "    mid, subfolder='scheduler'",
+        ")",
+        "sch = UniPCMultistepScheduler.from_config(sch.config, flow_shift=3.0)",
+        "pipe = WanPipeline(",
+        "    tokenizer=None, text_encoder=None,",
+        "    vae=vae, scheduler=sch, transformer=tr",
+        ")",
+        "pipe.text_encoder = type('D', (), {'dtype': torch.bfloat16})()",
+        "pipe.vae.enable_tiling()",
+        "pipe.vae.enable_slicing()",
+        "pipe.to('cuda')",
+        "embs = torch.load('/tmp/embs.pt', map_location='cpu',",
+        "                  weights_only=True)",
+        "s, e = int(sys.argv[1]), int(sys.argv[2])",
+        "for i in range(s, e):",
+        "    pe, ne = embs[i]",
+        "    g = torch.Generator('cuda').manual_seed(100 + i)",
+        "    with torch.no_grad():",
+        "        fr = pipe(",
+        "            prompt_embeds=pe.to('cuda'),",
+        "            negative_prompt_embeds=ne.to('cuda'),",
+        "            height=832, width=480, num_frames=25,",
+        "            num_inference_steps=20, guidance_scale=5.0,",
+        "            generator=g",
+        "        ).frames[0]",
+        "    export_to_video(fr, f'/tmp/c_{i}.mp4', fps=16)",
+    ]
+    with open("/tmp/w_wan.py", "w") as f:
+        f.write("\n".join(w_lines))
+
+    gpus = subprocess.check_output(["nvidia-smi", "-L"]).decode().splitlines()
+    ng = len(gpus)
+    if ng >= 2:
+        e0, e1 = os.environ.copy(), os.environ.copy()
+        e0["CUDA_VISIBLE_DEVICES"] = "0"
+        e1["CUDA_VISIBLE_DEVICES"] = "1"
+        l0, l1 = open("/tmp/w0.log", "w"), open("/tmp/w1.log", "w")
+        p0 = subprocess.Popen(
+            ["python", "/tmp/w_wan.py", "0", "5"], env=e0, stdout=l0, stderr=l0
+        )
+        p1 = subprocess.Popen(
+            ["python", "/tmp/w_wan.py", "5", "10"], env=e1, stdout=l1, stderr=l1
+        )
+        rc0, rc1 = p0.wait(), p1.wait()
+        l0.close()
+        l1.close()
+        if rc0 != 0 or rc1 != 0:
+            print("=== W0 ===", *open("/tmp/w0.log").readlines()[-40:])
+            print("=== W1 ===", *open("/tmp/w1.log").readlines()[-40:])
+            raise RuntimeError("GPU worker failed")
+    else:
+        e0 = os.environ.copy()
+        e0["CUDA_VISIBLE_DEVICES"] = "0"
+        sh(["python", "/tmp/w_wan.py", "0", "10"], env=e0)
+
+
+def fmt_t(s):
+    h = int(s // 3600)
+    m = int((s % 3600) // 60)
+    sec = s - h * 3600 - m * 60
+    return f"{h}:{m:02d}:{sec:05.2f}"
+
+
+def stage4_assemble(sc, meta):
+    dur = meta["dur"]
+    cuts = meta["cuts"]
+    ass = [
+        "[Script Info]",
+        "ScriptType: v4.00+",
+        "PlayResX: 1080",
+        "PlayResY: 1920",
+        "[V4+ Styles]",
+        "Format: Name, Fontname, Fontsize, PrimaryColour, "
+        "OutlineColour, BackColour, Bold, BorderStyle, Outline, "
+        "Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
+        "Style: Pop,Arial,74,&H0000FFFF,&H00000000,&H80000000,"
+        "-1,1,5,2,2,40,40,420,1",
+        "Style: Hook,Arial,64,&H00FFFFFF,&H000000CC,&H99000000,"
+        "-1,3,6,0,8,50,50,240,1",
+        "[Events]",
+        "Format: Layer, Start, End, Style, Name, "
+        "MarginL, MarginR, MarginV, Effect, Text",
+        f"Dialogue: 1,0:00:00.00,0:00:02.20,Hook,,0,0,0,,{sc['hook']}",
+    ]
+    for b in meta["beats"]:
+        t0, t1 = fmt_t(b["t"]), fmt_t(b["e"])
+        txt = b["w"].replace("{", "").replace("}", "").upper()
+        ass.append(
+            f"Dialogue: 0,{t0},{t1},Pop,,0,0,0,,"
+            "{\\fscx92\\fscy92\\t(0,90,\\fscx108\\fscy108)}" + txt
+        )
+    with open("/tmp/subs.ass", "w") as f:
+        f.write("\n".join(ass))
+
+    ins, fparts, cats = [], [], []
+    for i in range(10):
+        ins.extend(["-i", f"/tmp/c_{i}.mp4"])
+        dt = max(0.8, cuts[i + 1] - cuts[i])
+        sp = dt / 1.5625
+        fparts.append(
+            f"[{i}:v]setpts={sp:.4f}*PTS,fps=30,"
+            f"scale=1080:1920:force_original_aspect_ratio=increase,"
+            f"crop=1080:1920,"
+            f"scale=w=trunc(iw*(1+0.05*t)/2)*2:h=-2:eval=frame,"
+            f"crop=1080:1920,trim=duration={dt:.3f},"
+            f"setpts=PTS-STARTPTS[v{i}]"
+        )
+        cats.append(f"[v{i}]")
+    fparts.append(
+        "".join(cats) + "concat=n=10:v=1:a=0,"
+        "eq=contrast=1.06:saturation=1.12,"
+        "noise=alls=4:allf=t+u,ass=/tmp/subs.ass,format=yuv420p[vout]"
+    )
+    fparts.append(
+        "[10:a]dynaudnorm,volume=1.1[va];"
+        f"anoisesrc=color=brown:d={dur:.2f}:a=0.05,"
+        "lowpass=f=105[bg];"
+        "[va][bg]amix=inputs=2:duration=first[aout]"
+    )
+    cmd = (
+        ["ffmpeg", "-y"] + ins + ["-i", "/tmp/voice.wav"]
+        + ["-filter_complex", ";".join(fparts)]
+        + ["-map", "[vout]", "-map", "[aout]", "-t", f"{dur:.3f}"]
+        + ["-c:v", "libx264", "-preset", "fast", "-crf", "20"]
+        + ["-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart"]
+        + [f"{OUT}/final_output.mp4"]
+    )
+    sh(cmd, quiet=True)
+    if os.path.getsize(f"{OUT}/final_output.mp4") < 100000:
+        raise RuntimeError("final_output.mp4 too small")
+
 
 if __name__ == "__main__":
-    s = stage1_script(); m = stage2_audio(); stage3_wan(s, m)
+    s = stage1_script()
+    m = stage2_audio(s)
+    stage3_wan(s, m)
+    stage4_assemble(s, m)
