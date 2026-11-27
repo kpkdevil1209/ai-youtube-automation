@@ -5,14 +5,14 @@ LEAK_RE = re.compile(
     r"(under \d+ chars|file #|icy cola|and that is why)", re.I
 )
 TOPICS = [
+    "What happens inside your body if you swallow tiny magnets",
+    "The 1986 balloon disaster that shut down an entire city",
     "Why airplane windows have a tiny pinhole near the bottom",
-    "The 1986 balloon launch disaster that paralyzed Cleveland",
-    "What happens inside your body if you swallow a magnet",
-    "Why deep sea divers hear strange metallic knocking sounds",
-    "The silent 1962 survival trick that saved a trapped miner",
+    "Why deep sea divers suddenly hear metallic knocking sounds",
+    "The weird 1962 trick that kept a trapped miner alive",
     "Why modern skyscrapers sway on purpose during storms",
-    "How one tiny screw mistake locked an entire vault forever",
-    "Why astronauts lose their sense of up and down in dark rooms",
+    "What happens to your brain in total zero-sound darkness",
+    "How one tiny screw mistake locked a giant bank vault forever",
 ]
 
 
@@ -68,13 +68,14 @@ def stage1_script():
         "Return JSON with keys: topic, title, hook, description, "
         "tags, script, visual_prompts. "
         f"Topic: {topic}. "
-        "Keep script short: 3 punchy sentences (28 to 37 words total), "
+        "Style: fast Zack D Films curiosity Short. "
+        "script: 3 punchy 5th-grade sentences (28 to 37 words total), "
         "instant 2-second hook and shocking twist at the end. "
         "hook: 3 to 5 uppercase words. "
         "title: intriguing, max 50 chars, no hashtags. "
         "description: 1 short intriguing sentence, no hashtags. "
         "tags: 5 lowercase strings. "
-        "visual_prompts: list of 10 short 3D CGI scene strings."
+        "visual_prompts: 10 short 3D Pixar cartoon scene prompts."
     )
     best = None
     for k in range(3):
@@ -83,7 +84,7 @@ def stage1_script():
             "prompt": prompt,
             "stream": False,
             "format": "json",
-            "options": {"temperature": 0.7},
+            "options": {"temperature": 0.75},
         }).encode()
         req = urllib.request.Request(
             "http://127.0.0.1:11434/api/generate",
@@ -265,104 +266,72 @@ def stage2_audio(sc):
     return meta
 
 
-def stage3_wan(sc, meta):
+def stage3_render(sc, meta):
     sh([
         "pip", "install", "-q", "--no-warn-script-location",
-        "diffusers>=0.32.2", "transformers>=4.49,<5",
-        "accelerate", "ftfy", "sentencepiece", "imageio[ffmpeg]",
+        "diffusers>=0.30.0", "transformers>=4.44,<5",
+        "accelerate", "safetensors", "imageio[ffmpeg]",
     ])
-    import torch
-    from huggingface_hub import snapshot_download
-    from transformers import AutoTokenizer, UMT5EncoderModel
-    from diffusers import WanPipeline
+    from huggingface_hub import hf_hub_download, snapshot_download
 
-    mid = "Wan-AI/Wan2.1-T2V-1.3B-Diffusers"
-    snapshot_download(mid)
+    rep = "ByteDance/AnimateDiff-Lightning"
+    ckpt = "animatediff_lightning_8step_diffusers.safetensors"
+    hf_hub_download(rep, ckpt)
+    base_id = "stablediffusionapi/disney-pixar-cartoon"
+    try:
+        snapshot_download(base_id)
+    except Exception:
+        base_id = "Lykon/dreamshaper-8"
+        snapshot_download(base_id)
+
     prompts = [
-        f"Stylized 3D Pixar-like CGI cinematic scene, dramatic "
-        f"volumetric lighting, dynamic camera motion: {p}"
+        f"3D Pixar animation style, studio cinematic lighting, "
+        f"vivid depth, smooth dynamic action: {p}"
         for p in sc["visual_prompts"][:10]
     ]
-    neg = (
-        "blurry, static, watermark, text, subtitle, distorted, "
-        "overexposed, low quality"
-    )
-    tok = AutoTokenizer.from_pretrained(mid, subfolder="tokenizer")
-    te = UMT5EncoderModel.from_pretrained(
-        mid, subfolder="text_encoder", torch_dtype=torch.bfloat16
-    ).to("cuda:0")
-    ep = WanPipeline(
-        tokenizer=tok, text_encoder=te,
-        vae=None, scheduler=None, transformer=None,
-    )
-    with torch.no_grad():
-        embs = [
-            tuple(x.cpu() for x in ep.encode_prompt(
-                p, neg, True, device="cuda:0"
-            ))
-            for p in prompts
-        ]
-    torch.save(embs, "/tmp/embs.pt")
-    del ep, te, tok, embs
-    gc.collect()
-    torch.cuda.empty_cache()
+    with open("/tmp/prompts.json", "w") as f:
+        json.dump(prompts, f)
 
     w_lines = [
-        "import sys, torch, torch.nn.functional as F",
+        "import sys, json, torch",
         "from diffusers import (",
-        "    AutoencoderKLWan, WanPipeline,",
-        "    WanTransformer3DModel, UniPCMultistepScheduler",
+        "    AnimateDiffPipeline, MotionAdapter, EulerDiscreteScheduler",
         ")",
         "from diffusers.utils import export_to_video",
-        "_sd = F.scaled_dot_product_attention",
-        "def _cs(query, key, value, attn_mask=None,",
-        "        dropout_p=0.0, is_causal=False, **kw):",
-        "    if attn_mask is not None or is_causal or query.shape[-2] <= 512:",
-        "        return _sd(query, key, value, attn_mask=attn_mask,",
-        "                   dropout_p=dropout_p, is_causal=is_causal, **kw)",
-        "    out = [",
-        "        _sd(query[..., i:i+512, :], key, value, attn_mask=None,",
-        "            dropout_p=dropout_p, is_causal=False, **kw)",
-        "        for i in range(0, query.shape[-2], 512)",
-        "    ]",
-        "    return torch.cat(out, dim=-2)",
-        "F.scaled_dot_product_attention = _cs",
-        "mid = 'Wan-AI/Wan2.1-T2V-1.3B-Diffusers'",
-        "vae = AutoencoderKLWan.from_pretrained(",
-        "    mid, subfolder='vae', torch_dtype=torch.float32",
+        "from huggingface_hub import hf_hub_download",
+        "from safetensors.torch import load_file",
+        "rep = 'ByteDance/AnimateDiff-Lightning'",
+        "ckpt = 'animatediff_lightning_8step_diffusers.safetensors'",
+        "ad = MotionAdapter().to('cuda', torch.float16)",
+        "ad.load_state_dict(",
+        "    load_file(hf_hub_download(rep, ckpt), device='cuda')",
         ")",
-        "tr = WanTransformer3DModel.from_pretrained(",
-        "    mid, subfolder='transformer', torch_dtype=torch.bfloat16",
+        f"pipe = AnimateDiffPipeline.from_pretrained(",
+        f"    '{base_id}', motion_adapter=ad, torch_dtype=torch.float16",
+        f")",
+        "pipe.scheduler = EulerDiscreteScheduler.from_config(",
+        "    pipe.scheduler.config, timestep_spacing='trailing',",
+        "    beta_schedule='linear'",
         ")",
-        "sch = UniPCMultistepScheduler.from_pretrained(",
-        "    mid, subfolder='scheduler'",
-        ")",
-        "sch = UniPCMultistepScheduler.from_config(sch.config, flow_shift=3.0)",
-        "pipe = WanPipeline(",
-        "    tokenizer=None, text_encoder=None,",
-        "    vae=vae, scheduler=sch, transformer=tr",
-        ")",
-        "pipe.text_encoder = type('D', (), {'dtype': torch.bfloat16})()",
-        "if hasattr(pipe.vae, 'enable_tiling'): pipe.vae.enable_tiling()",
-        "if hasattr(pipe.vae, 'enable_slicing'): pipe.vae.enable_slicing()",
+        "if hasattr(pipe, 'enable_vae_slicing'): pipe.enable_vae_slicing()",
+        "if hasattr(pipe, 'enable_attention_slicing'):",
+        "    pipe.enable_attention_slicing()",
         "pipe.to('cuda')",
-        "embs = torch.load('/tmp/embs.pt', map_location='cpu',",
-        "                  weights_only=True)",
+        "prompts = json.load(open('/tmp/prompts.json'))",
+        "neg = 'blurry, distorted, deformed, watermark, text, 2d, flat'",
         "s, e = int(sys.argv[1]), int(sys.argv[2])",
         "for i in range(s, e):",
-        "    pe, ne = embs[i]",
-        "    g = torch.Generator('cuda').manual_seed(100 + i)",
-        "    with torch.no_grad():",
+        "    g = torch.Generator('cuda').manual_seed(200 + i)",
+        "    with torch.inference_mode():",
         "        fr = pipe(",
-        "            prompt_embeds=pe.to('cuda'),",
-        "            negative_prompt_embeds=ne.to('cuda'),",
-        "            height=832, width=480, num_frames=25,",
-        "            num_inference_steps=20, guidance_scale=5.0,",
+        "            prompt=prompts[i], negative_prompt=neg,",
+        "            height=768, width=448, num_frames=16,",
+        "            num_inference_steps=8, guidance_scale=1.5,",
         "            generator=g",
         "        ).frames[0]",
-        "    export_to_video(fr, f'/tmp/c_{i}.mp4', fps=16)",
+        "    export_to_video(fr, f'/tmp/c_{i}.mp4', fps=10)",
     ]
-    with open("/tmp/w_wan.py", "w") as f:
+    with open("/tmp/w_anim.py", "w") as f:
         f.write("\n".join(w_lines))
 
     gpus = subprocess.check_output(["nvidia-smi", "-L"]).decode().splitlines()
@@ -372,10 +341,10 @@ def stage3_wan(sc, meta):
         e1["CUDA_VISIBLE_DEVICES"] = "1"
         l0, l1 = open("/tmp/w0.log", "w"), open("/tmp/w1.log", "w")
         p0 = subprocess.Popen(
-            ["python", "/tmp/w_wan.py", "0", "5"], env=e0, stdout=l0, stderr=l0
+            ["python", "/tmp/w_anim.py", "0", "5"], env=e0, stdout=l0, stderr=l0
         )
         p1 = subprocess.Popen(
-            ["python", "/tmp/w_wan.py", "5", "10"], env=e1, stdout=l1, stderr=l1
+            ["python", "/tmp/w_anim.py", "5", "10"], env=e1, stdout=l1, stderr=l1
         )
         rc0, rc1 = p0.wait(), p1.wait()
         l0.close()
@@ -387,7 +356,7 @@ def stage3_wan(sc, meta):
     else:
         e0 = os.environ.copy()
         e0["CUDA_VISIBLE_DEVICES"] = "0"
-        sh(["python", "/tmp/w_wan.py", "0", "10"], env=e0)
+        sh(["python", "/tmp/w_anim.py", "0", "10"], env=e0)
 
 
 def fmt_t(s):
@@ -432,9 +401,9 @@ def stage4_assemble(sc, meta):
     for i in range(10):
         ins.extend(["-i", f"/tmp/c_{i}.mp4"])
         dt = max(0.8, cuts[i + 1] - cuts[i])
-        sp = dt / 1.5625
+        sp = dt / 1.6
         fparts.append(
-            f"[{i}:v]setpts={sp:.4f}*PTS,fps=30,"
+            f"[{i}:v]setpts={sp:.4f}*PTS,framerate=fps=30,"
             f"scale=1080:1920:force_original_aspect_ratio=increase,"
             f"crop=1080:1920,"
             f"scale=w=trunc(iw*(1+0.05*t)/2)*2:h=-2:eval=frame,"
@@ -444,7 +413,7 @@ def stage4_assemble(sc, meta):
         cats.append(f"[v{i}]")
     fparts.append(
         "".join(cats) + "concat=n=10:v=1:a=0,"
-        "eq=contrast=1.06:saturation=1.12,"
+        "eq=contrast=1.07:saturation=1.14,"
         "noise=alls=4:allf=t+u,ass=/tmp/subs.ass,format=yuv420p[vout]"
     )
     fparts.append(
@@ -473,5 +442,5 @@ if __name__ == "__main__":
     sh(["nvidia-smi", "-L"])
     s = stage1_script()
     m = stage2_audio(s)
-    stage3_wan(s, m)
+    stage3_render(s, m)
     stage4_assemble(s, m)
