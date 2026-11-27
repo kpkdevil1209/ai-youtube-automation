@@ -24,11 +24,20 @@ def sh(cmd, env=None, quiet=False):
     return subprocess.run(cmd, **kw)
 
 
+def probe_dur(path):
+    out = subprocess.check_output([
+        "ffprobe", "-v", "error", "-show_entries", "format=duration",
+        "-of", "default=noprint_wrappers=1:nokey=1", path,
+    ])
+    return float(out.decode().strip())
+
+
 def stage1_script():
     if not shutil.which("ollama"):
         sh(
             "which zstd >/dev/null || "
-            "(apt-get update -qq && apt-get install -y -qq zstd)"
+            "(apt-get update -qq && apt-get install -y -qq zstd)",
+            quiet=True,
         )
         sh(
             "curl -fsSL https://ollama.com/download/"
@@ -59,10 +68,11 @@ def stage1_script():
         "Return JSON with keys: topic, title, hook, description, "
         "tags, script, visual_prompts. "
         f"Topic: {topic}. "
-        "Keep script short: 3 punchy sentences (30 to 40 words total), "
+        "Keep script short: 3 punchy sentences (28 to 37 words total), "
         "instant 2-second hook and shocking twist at the end. "
         "hook: 3 to 5 uppercase words. "
         "title: intriguing, max 50 chars, no hashtags. "
+        "description: 1 short intriguing sentence, no hashtags. "
         "tags: 5 lowercase strings. "
         "visual_prompts: list of 10 short 3D CGI scene strings."
     )
@@ -93,7 +103,8 @@ def stage1_script():
             continue
         scr = str(cand.get("script", "")).strip()
         scr = re.sub(r"\band that is why\b", "that is how", scr, flags=re.I)
-        scr = re.sub(r"\s+", " ", scr)
+        scr = re.sub(LEAK_RE, "", scr)
+        scr = re.sub(r"\s+", " ", scr).strip()
         cand["script"] = scr
         vp = cand.get("visual_prompts") or []
         vp = [
@@ -106,16 +117,16 @@ def stage1_script():
         print(f"S1 try {k}: wc={wc} vp={len(vp)}")
         if wc >= 15 and len(vp) >= 3:
             best = cand
-            if 24 <= wc <= 46 and len(vp) >= 8:
+            if 24 <= wc <= 42 and len(vp) >= 8:
                 break
     if not best:
         raise RuntimeError("Stage 1 script validation failed")
     words = best["script"].split()
-    if len(words) > 42:
-        cut = " ".join(words[:42])
+    if len(words) > 38:
+        cut = " ".join(words[:38])
         p_idx = cut.rfind(".")
         best["script"] = (
-            cut[:p_idx + 1] if p_idx > 90 else cut.rstrip(".") + "."
+            cut[:p_idx + 1] if p_idx > 80 else cut.rstrip(".") + "."
         )
     vp = best["visual_prompts"][:10]
     angs = ["wide angle ", "close-up ", "dramatic overhead ", "low angle "]
@@ -127,6 +138,8 @@ def stage1_script():
     best["topic"] = str(best.get("topic") or topic)[:80]
     t = re.sub(LEAK_RE, "", str(best.get("title") or topic))
     best["title"] = t.replace("#", "").strip()[:58] or topic[:58]
+    d_txt = re.sub(LEAK_RE, "", str(best.get("description") or ""))
+    best["description"] = d_txt.replace("#", "").strip()[:180] or topic
     hk = str(best.get("hook") or "WAIT FOR THE END").upper()[:36]
     best["hook"] = re.sub(r"[{}\r\n]", "", hk)
     if not isinstance(best.get("tags"), list) or not best["tags"]:
@@ -176,23 +189,35 @@ def stage2_audio(sc):
                 "scipy", "edge-tts",
             ], quiet=True)
     cb_lines = [
-        "import os, sys, types, soundfile as sf",
+        "import os, sys, types, subprocess, soundfile as sf",
         "os.environ['TRANSFORMERS_ATTN_IMPLEMENTATION'] = 'eager'",
         "for n in ('spacy_pkuseg', 'gradio'):",
         "    if n not in sys.modules:",
         "        m = types.ModuleType(n)",
         "        m.pkuseg = lambda *a, **k: None",
         "        sys.modules[n] = m",
-        "import perth",
-        "if getattr(perth, 'PerthImplicitWatermarker', None) is None:",
-        "    class _P:",
-        "        def apply_watermark(self, w, **k): return w",
-        "    perth.PerthImplicitWatermarker = _P",
-        "from chatterbox.tts import ChatterboxTTS",
         "txt = open('/tmp/tts_txt.txt').read().strip()",
-        "m = ChatterboxTTS.from_pretrained('cuda')",
-        "wav = m.generate(txt, exaggeration=0.55, cfg_weight=0.45)",
-        "sf.write('/tmp/voice_raw.wav', wav.squeeze().cpu().numpy(), m.sr)",
+        "try:",
+        "    import perth",
+        "    if getattr(perth, 'PerthImplicitWatermarker', None) is None:",
+        "        class _P:",
+        "            def apply_watermark(self, w, **k): return w",
+        "        perth.PerthImplicitWatermarker = _P",
+        "    from chatterbox.tts import ChatterboxTTS",
+        "    m = ChatterboxTTS.from_pretrained('cuda')",
+        "    wav = m.generate(txt, exaggeration=0.55, cfg_weight=0.45)",
+        "    sf.write('/tmp/voice_raw.wav', wav.squeeze().cpu().numpy(), m.sr)",
+        "except Exception as e:",
+        "    print('CB fallback edge-tts:', e)",
+        "    subprocess.run([",
+        "        sys.executable, '-m', 'edge_tts',",
+        "        '--voice', 'en-US-AndrewMultilingualNeural',",
+        "        '--text', txt, '--write-media', '/tmp/voice_raw.mp3'",
+        "    ], check=True)",
+        "    subprocess.run([",
+        "        'ffmpeg', '-y', '-i', '/tmp/voice_raw.mp3',",
+        "        '/tmp/voice_raw.wav'",
+        "    ], check=True)",
     ]
     with open("/tmp/tts_txt.txt", "w") as f:
         f.write(sc["script"])
@@ -201,34 +226,28 @@ def stage2_audio(sc):
     sh([py, "/tmp/cb_run.py"])
     sh([
         "ffmpeg", "-y", "-i", "/tmp/voice_raw.wav",
-        "-af", "silenceremove=start_periods=1:start_threshold=-42dB",
+        "-af",
+        "silenceremove=start_periods=1:start_threshold=-42dB,"
+        "areverse,silenceremove=start_periods=1:start_threshold=-42dB,"
+        "areverse",
         "/tmp/voice_trim.wav",
     ], quiet=True)
     src = "/tmp/voice_trim.wav"
-    d = float(subprocess.check_output([
-        "ffprobe", "-v", "error", "-show_entries", "format=duration",
-        "-of", "default=noprint_wrappers=1:nokey=1", src,
-    ]).decode().strip())
+    d = probe_dur(src)
     if d < 2.0:
         src = "/tmp/voice_raw.wav"
-        d = float(subprocess.check_output([
-            "ffprobe", "-v", "error", "-show_entries", "format=duration",
-            "-of", "default=noprint_wrappers=1:nokey=1", src,
-        ]).decode().strip())
+        d = probe_dur(src)
     tgt = round(random.uniform(14.15, 15.85), 2)
     if 13.95 <= d <= 15.95:
         sh(["cp", src, "/tmp/voice.wav"])
         dur = d
     else:
-        spd = max(0.80, min(1.30, d / tgt))
+        spd = max(0.75, min(1.55, d / tgt))
         sh([
             "ffmpeg", "-y", "-i", src,
             "-af", f"atempo={spd:.4f}", "/tmp/voice.wav",
         ], quiet=True)
-        dur = float(subprocess.check_output([
-            "ffprobe", "-v", "error", "-show_entries", "format=duration",
-            "-of", "default=noprint_wrappers=1:nokey=1", "/tmp/voice.wav",
-        ]).decode().strip())
+        dur = probe_dur("/tmp/voice.wav")
     shutil.rmtree(ve, ignore_errors=True)
     words = sc["script"].split()
     cuts = [round(dur * i / 10.0, 3) for i in range(11)]
@@ -248,10 +267,10 @@ def stage2_audio(sc):
 
 def stage3_wan(sc, meta):
     sh([
-        "pip", "install", "-q", "diffusers>=0.32.2",
-        "transformers>=4.49,<5", "accelerate", "ftfy",
-        "sentencepiece", "imageio[ffmpeg]",
-    ], quiet=True)
+        "pip", "install", "-q", "--no-warn-script-location",
+        "diffusers>=0.32.2", "transformers>=4.49,<5",
+        "accelerate", "ftfy", "sentencepiece", "imageio[ffmpeg]",
+    ])
     import torch
     from huggingface_hub import snapshot_download
     from transformers import AutoTokenizer, UMT5EncoderModel
@@ -296,13 +315,15 @@ def stage3_wan(sc, meta):
         ")",
         "from diffusers.utils import export_to_video",
         "_sd = F.scaled_dot_product_attention",
-        "def _cs(q, k, v, attn_mask=None, dropout_p=0.0,",
-        "        is_causal=False, **kw):",
-        "    if attn_mask is not None or is_causal or q.shape[-2] <= 512:",
-        "        return _sd(q, k, v, attn_mask, dropout_p, is_causal, **kw)",
+        "def _cs(query, key, value, attn_mask=None,",
+        "        dropout_p=0.0, is_causal=False, **kw):",
+        "    if attn_mask is not None or is_causal or query.shape[-2] <= 512:",
+        "        return _sd(query, key, value, attn_mask=attn_mask,",
+        "                   dropout_p=dropout_p, is_causal=is_causal, **kw)",
         "    out = [",
-        "        _sd(q[..., i:i+512, :], k, v, None, dropout_p, False, **kw)",
-        "        for i in range(0, q.shape[-2], 512)",
+        "        _sd(query[..., i:i+512, :], key, value, attn_mask=None,",
+        "            dropout_p=dropout_p, is_causal=False, **kw)",
+        "        for i in range(0, query.shape[-2], 512)",
         "    ]",
         "    return torch.cat(out, dim=-2)",
         "F.scaled_dot_product_attention = _cs",
@@ -322,8 +343,8 @@ def stage3_wan(sc, meta):
         "    vae=vae, scheduler=sch, transformer=tr",
         ")",
         "pipe.text_encoder = type('D', (), {'dtype': torch.bfloat16})()",
-        "pipe.vae.enable_tiling()",
-        "pipe.vae.enable_slicing()",
+        "if hasattr(pipe.vae, 'enable_tiling'): pipe.vae.enable_tiling()",
+        "if hasattr(pipe.vae, 'enable_slicing'): pipe.vae.enable_slicing()",
         "pipe.to('cuda')",
         "embs = torch.load('/tmp/embs.pt', map_location='cpu',",
         "                  weights_only=True)",
@@ -388,9 +409,9 @@ def stage4_assemble(sc, meta):
         "Format: Name, Fontname, Fontsize, PrimaryColour, "
         "OutlineColour, BackColour, Bold, BorderStyle, Outline, "
         "Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
-        "Style: Pop,Arial,74,&H0000FFFF,&H00000000,&H80000000,"
+        "Style: Pop,DejaVu Sans,70,&H0000FFFF,&H00000000,&H80000000,"
         "-1,1,5,2,2,40,40,420,1",
-        "Style: Hook,Arial,64,&H00FFFFFF,&H000000CC,&H99000000,"
+        "Style: Hook,DejaVu Sans,58,&H00FFFFFF,&H000000CC,&H99000000,"
         "-1,3,6,0,8,50,50,240,1",
         "[Events]",
         "Format: Layer, Start, End, Style, Name, "
@@ -427,8 +448,8 @@ def stage4_assemble(sc, meta):
         "noise=alls=4:allf=t+u,ass=/tmp/subs.ass,format=yuv420p[vout]"
     )
     fparts.append(
-        "[10:a]dynaudnorm,volume=1.1[va];"
-        f"anoisesrc=color=brown:d={dur:.2f}:a=0.05,"
+        "[10:a]aresample=44100,dynaudnorm,volume=1.1[va];"
+        f"anoisesrc=c=brown:a=0.05:r=44100:d={dur:.2f},"
         "lowpass=f=105[bg];"
         "[va][bg]amix=inputs=2:duration=first[aout]"
     )
@@ -440,12 +461,16 @@ def stage4_assemble(sc, meta):
         + ["-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart"]
         + [f"{OUT}/final_output.mp4"]
     )
-    sh(cmd, quiet=True)
+    res = subprocess.run(cmd, capture_output=True, text=True)
+    if res.returncode != 0:
+        print(res.stderr[-2000:])
+        raise RuntimeError("Stage 4 ffmpeg failed")
     if os.path.getsize(f"{OUT}/final_output.mp4") < 100000:
         raise RuntimeError("final_output.mp4 too small")
 
 
 if __name__ == "__main__":
+    sh(["nvidia-smi", "-L"])
     s = stage1_script()
     m = stage2_audio(s)
     stage3_wan(s, m)
