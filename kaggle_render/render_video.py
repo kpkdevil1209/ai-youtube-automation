@@ -50,7 +50,11 @@ def stage1_script():
         try:
             if requests.get("http://127.0.0.1:11434/api/tags", timeout=2).status_code == 200: break
         except Exception: time.sleep(1)
-    sh(["ollama", "pull", "qwen2.5:14b"], env=env)
+    for r in range(3):
+        try: sh(["ollama", "pull", "qwen2.5:14b"], env=env); break
+        except Exception:
+            if r == 2: raise
+            time.sleep(5)
     def ask(prompt, fmt=None, temp=0.65):
         p = {"model": "qwen2.5:14b", "messages": [{"role": "user", "content": prompt}], "stream": False, "options": {"temperature": temp, "num_ctx": 4096}}
         if fmt: p["format"] = fmt
@@ -61,7 +65,7 @@ def stage1_script():
     best, err = None, ""
     for _ in range(4):
         try:
-            cand = json.loads(ask(f"Write a viral 15s Short from:\nTOPIC: {topic}\nFACTS: {facts}\nARC:\n{outline}\n" + (f"FIX: {err}\n" if err else "") + "Rules (never copy rule words into output):\n- title: 20-42 letters curiosity title (never mention chars or FILE #)\n- hook_banner: 3-5 bold uppercase words\n- lines: EXACTLY 5 spoken sentences, total 35-41 words, each ending in '.' or '?'. Line 1=unanswered contradiction hook, Line 2=clue, Line 3=false assumption, Line 4=mind-twist reveal, Line 5=haunting loop back to Line 1. Ban 'and that is why'.\n- shots: EXACTLY 10 distinct 9:16 photorealistic prompts (2 cuts/line, 12-18 words each, zero text in visuals)\n- pinned_question (<95 chars), description (2 factual sentences), tags (6 words)", fmt=schema, temp=0.55))
+            cand = json.loads(ask(f"Write a viral 15s Short from:\nTOPIC: {topic}\nFACTS: {facts}\nARC:\n{outline}\n" + (f"FIX: {err}\n" if err else "") + "Rules (never copy rule words into output):\n- title: 20-42 letters curiosity title (never mention chars or FILE #)\n- hook_banner: 3-5 bold uppercase words\n- lines: EXACTLY 5 simple spoken sentences, total 35-41 words, each ending in '.' or '?'. Line 1=unanswered shock hook, Line 2=clue, Line 3=false assumption, Line 4=mind-twist reveal, Line 5=haunting loop back to Line 1. Ban 'and that is why'.\n- shots: EXACTLY 10 distinct 9:16 classic 35mm documentary prompts (2 cuts/line, 12-18 words each, zero text in visuals)\n- pinned_question (<95 chars), description (2 factual sentences), tags (6 words)", fmt=schema, temp=0.55))
             cand["title"] = clean_title(cand.get("title", ""), topic)
             cand["hook_banner"] = LEAK_RE.sub("", str(cand.get("hook_banner", ""))).strip().upper()[:42]
             err = bad_script(cand)
@@ -70,7 +74,7 @@ def stage1_script():
         except Exception as e: err = str(e)
     srv.terminate(); shutil.rmtree("/tmp/ollama_models", ignore_errors=True)
     if best is None:
-        best = {"title": clean_title("", topic), "hook_banner": "SEALED 12KM UNDERGROUND", "lines": ["Why did engineers suddenly seal Earth's deepest hole?", "At twelve kilometers down, steel drills struck boiling silence.", "Geologists expected dry solid granite beneath the crust.", "Instead, crushed rock flowed like plastic in trapped water.", "Nobody knows what pressure awaits any deeper below."], "shots": ["Extreme close-up rusted drill shaft descending into dark subterranean abyss, volumetric dust", "Wide aerial abandoned Arctic concrete tower in heavy fog, cinematic film grain", "Glowing red molten rock fractures deep underground, thermal heat shimmer, 8k", "Macro analog pressure gauge needle shaking violently in dim red light", "Dark fractured ancient granite cavern lit by single harsh beam", "Water droplets seeping from superheated black rock deep underground, macro", "Warped shimmering stone bending under extreme subterranean pressure", "Heavy iron hatch welded shut with flying orange sparks over concrete shaft", "Rusted steel padlock frozen on chain fence in Arctic snowstorm", "Vertigo shot looking straight down endless pitch black vertical shaft"], "pinned_question": "Would you go down if they reopened it?", "description": facts[:260], "tags": ["mystery", "science", "deep earth", "unexplained", "documentary", "facts"]}
+        best = {"title": clean_title("", topic), "hook_banner": "SEALED 12KM UNDERGROUND", "lines": ["Why did engineers suddenly seal Earth's deepest hole?", "At twelve kilometers down, steel drills struck boiling silence.", "Geologists expected dry solid granite beneath the crust.", "Instead, crushed rock flowed like plastic in trapped water.", "Nobody knows what pressure awaits any deeper below."], "shots": ["Extreme close-up rusted drill shaft descending into dark subterranean abyss, 35mm film", "Wide aerial abandoned Arctic concrete tower in heavy fog, archival film grain", "Glowing red molten rock fractures deep underground, thermal shimmer, matte shadows", "Macro analog pressure gauge needle shaking violently in dim red studio light", "Dark fractured ancient granite cavern lit by single narrow flashlight beam", "Water droplets seeping from superheated black rock deep underground, macro lens", "Warped shimmering stone bending under extreme subterranean pressure, dark documentary", "Heavy iron hatch welded shut with flying orange sparks over concrete shaft", "Rusted steel padlock frozen on chain fence in Arctic snowstorm, 35mm", "Vertigo shot looking straight down endless pitch black vertical shaft"], "pinned_question": "Would you go down if they reopened it?", "description": facts[:260], "tags": ["mystery", "science", "deep earth", "unexplained", "documentary", "facts"]}
     best.update({"topic": topic, "target_dur": target_dur})
     json.dump(best, open(SCRIPT_OUT, "w", encoding="utf-8"), indent=2)
     print("[Stage 1]", best["title"], "| target:", target_dur)
@@ -83,7 +87,7 @@ def stage2_audio(sdata):
     sh([uv, "venv", "--python", "3.11", venv])
     py = f"{venv}/bin/python"
     sh([uv, "pip", "install", "--python", py, "torch==2.6.0", "torchaudio==2.6.0", "--index-url", "https://download.pytorch.org/whl/cu124"])
-    sh([uv, "pip", "install", "--python", py, "setuptools<82", "chatterbox-tts", "soundfile", "numpy", "edge-tts"])
+    sh([uv, "pip", "install", "--python", py, "--extra-index-url", "https://download.pytorch.org/whl/cu124", "setuptools<82", "chatterbox-tts", "soundfile", "numpy", "edge-tts"])
     cb = "\n".join([
         "import os, re, json, asyncio, random, subprocess, numpy as np, soundfile as sf, perth",
         "if getattr(perth, 'PerthImplicitWatermarker', None) is None:",
@@ -175,45 +179,47 @@ def stage3_wan(sdata, meta):
         "tok = AutoTokenizer.from_pretrained('/tmp/wan_model', subfolder='tokenizer')",
         "enc = UMT5EncoderModel.from_pretrained('/tmp/wan_model', subfolder='text_encoder', torch_dtype=torch.bfloat16).to('cuda:0').eval()",
         "def e(t): x = tok([t], padding='max_length', max_length=226, truncation=True, return_tensors='pt').to('cuda:0'); return enc(x.input_ids, attention_mask=x.attention_mask)[0].cpu()",
-        "with torch.no_grad(): pos = [e(s + ', vertical 9:16, photorealistic, sharp focus, dramatic lighting, smooth motion') for s in shots]; neg = e('text, watermark, letters, blurry, distorted, cartoon, static')",
+        "with torch.no_grad(): pos = [e(s + ', vertical 9:16, classic 35mm Kodak film, matte documentary, chiaroscuro shadows, subtle film grain, smooth motion') for s in shots]; neg = e('text, watermark, letters, blurry, distorted, plastic CGI, neon, static')",
         "torch.save({'pos': pos, 'neg': neg}, '/tmp/pe.pt')",
     ]))
     sh([sys.executable, "/tmp/enc.py"])
     def worker(gpu, idxs):
         open(f"/tmp/w{gpu}.py", "w").write("\n".join([
-            f"import os, torch, imageio, numpy as np; os.environ['CUDA_VISIBLE_DEVICES']='{gpu}'",
+            "import torch",
             "from diffusers import WanPipeline, AutoencoderKLWan",
+            "from diffusers.schedulers.scheduling_unipc_multistep import UniPCMultistepScheduler",
+            "from diffusers.utils import export_to_video",
             "pe = torch.load('/tmp/pe.pt', map_location='cpu', weights_only=False)",
             "vae = AutoencoderKLWan.from_pretrained('/tmp/wan_model', subfolder='vae', torch_dtype=torch.float32)",
-            "pipe = WanPipeline.from_pretrained('/tmp/wan_model', vae=vae, text_encoder=None, tokenizer=None, torch_dtype=torch.bfloat16)",
-            "pipe.enable_model_cpu_offload(); pipe.vae.enable_tiling(); pipe.vae.enable_slicing(); neg = pe['neg'].to(dtype=torch.bfloat16)",
+            "pipe = WanPipeline.from_pretrained('/tmp/wan_model', vae=vae, text_encoder=None, tokenizer=None, torch_dtype=torch.float16)",
+            "pipe.scheduler = UniPCMultistepScheduler.from_config(pipe.scheduler.config, flow_shift=3.0)",
+            "pipe.enable_model_cpu_offload(); pipe.vae.enable_tiling(); pipe.vae.enable_slicing(); neg = pe['neg'].to(dtype=torch.float16)",
             f"for i in {idxs}:",
-            "    out = pipe(prompt_embeds=pe['pos'][i].to(dtype=torch.bfloat16), negative_prompt_embeds=neg, height=832, width=480, num_frames=25, num_inference_steps=20, guidance_scale=6.0, generator=torch.Generator('cpu').manual_seed(4200+i*17)).frames[0]",
-            "    w = imageio.get_writer(f'/tmp/clip_{i}.mp4', fps=16, codec='libx264', quality=8)",
-            "    for f in out: w.append_data(np.array(f) if not isinstance(f, np.ndarray) else f)",
-            "    w.close()",
+            "    out = pipe(prompt_embeds=pe['pos'][i].to(dtype=torch.float16), negative_prompt_embeds=neg, height=832, width=480, num_frames=25, num_inference_steps=20, guidance_scale=5.5, generator=torch.Generator('cpu').manual_seed(4200+i*17)).frames[0]",
+            "    export_to_video(out, f'/tmp/clip_{i}.mp4', fps=16)",
+            "    print(f'[GPU] Done shot {i}', flush=True)",
         ]))
-        return subprocess.Popen([sys.executable, f"/tmp/w{gpu}.py"])
+        env = {**os.environ, "CUDA_VISIBLE_DEVICES": str(gpu)}
+        return subprocess.Popen([sys.executable, f"/tmp/w{gpu}.py"], env=env, stdout=open(f"/tmp/w{gpu}.log", "w"), stderr=subprocess.STDOUT)
     import torch
     if torch.cuda.device_count() >= 2:
         p0, p1 = worker(0, [0, 2, 4, 6, 8]), worker(1, [1, 3, 5, 7, 9])
-        if p0.wait() != 0 or p1.wait() != 0: raise RuntimeError("GPU worker failed")
+        if p0.wait() != 0 or p1.wait() != 0:
+            for g in (0, 1):
+                if os.path.exists(f"/tmp/w{g}.log"): print(f"=== W{g} LOG ===\n" + "\n".join(open(f"/tmp/w{g}.log").read().splitlines()[-35:]))
+            raise RuntimeError("GPU worker failed")
     else:
-        if worker(0, list(range(10))).wait() != 0: raise RuntimeError("GPU 0 worker failed")
+        if worker(0, list(range(10))).wait() != 0:
+            print("=== W0 LOG ===\n" + "\n".join(open("/tmp/w0.log").read().splitlines()[-35:]))
+            raise RuntimeError("GPU 0 worker failed")
     shutil.rmtree("/tmp/wan_model", ignore_errors=True); shutil.rmtree("/tmp/hf_cache", ignore_errors=True)
     segs = []
     for i, d in enumerate(meta["cut_durs"]):
         seg = f"/tmp/seg_{i}.mp4"; flp = ",hflip" if i % 2 else ""
-        vf = f"setpts={d/1.5625:.4f}*PTS,fps=30,scale='trunc(1080*(1+0.09*t/{d:.3f})/2)*2':'trunc(1920*(1+0.09*t/{d:.3f})/2)*2':eval=frame:flags=lanczos,crop=1080:1920{flp},unsharp=5:5:0.75:5:5:0.0,eq=contrast=1.07:saturation=1.10:gamma=1.05"
+        vf = f"setpts={d/1.5625:.4f}*PTS,fps=30,scale='trunc(1080*(1+0.09*t/{d:.3f})/2)*2':'trunc(1920*(1+0.09*t/{d:.3f})/2)*2':eval=frame:flags=lanczos,crop=1080:1920{flp},noise=alls=7:allf=t,unsharp=5:5:0.75:5:5:0.0,eq=contrast=1.08:saturation=1.05:gamma=1.04"
         sh(["ffmpeg", "-y", "-i", f"/tmp/clip_{i}.mp4", "-vf", vf, "-t", f"{d:.3f}", "-c:v", "libx264", "-preset", "fast", "-crf", "16", "-pix_fmt", "yuv420p", "-an", seg])
         segs.append(seg)
     open("/tmp/concat.txt", "w").write("\n".join(f"file '{s}'" for s in segs))
     sh(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", "/tmp/concat.txt", "-c", "copy", "/tmp/vraw.mp4"])
     make_banner(sdata.get("hook_banner", "UNEXPLAINED SIGNAL"), "/tmp/banner.png")
-    sh(["ffmpeg", "-y", "-i", "/tmp/vraw.mp4", "-i", "/tmp/banner.png", "-i", str(AUDIO_OUT), "-filter_complex", "[0:v][1:v]overlay=0:200:enable='between(t,0,2.2)'[v1];[v1]ass=/tmp/subtitles.ass[vo]", "-map", "[vo]", "-map", "2:a", "-c:v", "libx264", "-preset", "medium", "-crf", "17", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k", "-shortest", "-movflags", "+faststart", str(FINAL_OUT)])
-    print("[Done]", FINAL_OUT)
-
-if __name__ == "__main__":
-    s = stage1_script()
-    m = stage2_audio(s)
-    stage3_wan(s, m)
+    sh(["ffmpeg", "-y", "-i", "/tmp/vraw.mp4", "-
